@@ -174,8 +174,8 @@ shelf life it has used. Useful as a quarterly "what do we still believe" review.
 
 The README you are reading is under `asof`, which is the only honest way to ship this:
 
-- The whole tool is 2,170 lines of Python. <!-- asof:source-lines -->
-- It is covered by 104 tests. <!-- asof:test-count -->
+- The whole tool is 2,215 lines of Python. <!-- asof:source-lines -->
+- It is covered by 109 tests. <!-- asof:test-count -->
 - It has 0 third-party dependencies. <!-- asof:dependencies -->
 
 Those three numbers are checked on every push by [the workflow](.github/workflows/ci.yml).

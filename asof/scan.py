@@ -188,14 +188,25 @@ def scan_tree(root: Path, include: list[str], exclude: list[str],
 
 
 def rewrite(root: Path, marker: Marker, new_token: str) -> None:
-    """Replace the value a marker points at, touching nothing else in the file."""
+    """Replace the value a marker points at, touching nothing else in the file.
+
+    Nothing else means nothing else: every other byte in the file survives,
+    including each line's own ending, trailing whitespace, and the presence or
+    absence of a final newline. Reading with ``newline=""`` is what makes that
+    true - the default translates CRLF to LF on the way in, which would turn a
+    one-number change into a whole-file diff on Windows.
+    """
     path = root / marker.path
-    text = path.read_text(encoding="utf-8")
-    newline = "\r\n" if "\r\n" in text else "\n"
-    lines = text.split(newline)
+    with open(path, encoding="utf-8", newline="") as fh:
+        lines = fh.read().splitlines(keepends=True)
+
     index = marker.line_no - 1
-    line = lines[index]
-    if line[marker.start:marker.end] != marker.token:
+    body = lines[index]
+    text = body.rstrip("\r\n")
+    ending = body[len(text):]
+    if text[marker.start:marker.end] != marker.token:
         raise ValueError(f"{marker.where}: file changed under us, not rewriting")
-    lines[index] = line[: marker.start] + new_token + line[marker.end:]
-    path.write_text(newline.join(lines), encoding="utf-8", newline="")
+
+    lines[index] = text[: marker.start] + new_token + text[marker.end:] + ending
+    with open(path, "w", encoding="utf-8", newline="") as fh:
+        fh.write("".join(lines))

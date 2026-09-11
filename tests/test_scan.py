@@ -155,6 +155,40 @@ class TestTreeAndRewrite(unittest.TestCase):
         self.assertEqual(path.read_text(encoding="utf-8"),
                          "We have 1,389 users today.  <!-- asof:users -->\ntail\n")
 
+    def rewrite_bytes(self, raw: bytes, new_token: str = "1,389") -> bytes:
+        (self.root / "README.md").write_bytes(raw)
+        marker = scan.scan_tree(self.root, [], [])[0]
+        scan.rewrite(self.root, marker, new_token)
+        return (self.root / "README.md").read_bytes()
+
+    def test_rewrite_keeps_crlf_line_endings(self):
+        raw = b"# Notes\r\n\r\nWe have 1,247 users. <!-- asof:users -->\r\nlast\r\n"
+        self.assertEqual(
+            self.rewrite_bytes(raw),
+            b"# Notes\r\n\r\nWe have 1,389 users. <!-- asof:users -->\r\nlast\r\n")
+
+    def test_rewrite_keeps_trailing_whitespace_and_tabs(self):
+        raw = b"We have 1,247 users. <!-- asof:users -->   \n\tindented \n"
+        self.assertEqual(
+            self.rewrite_bytes(raw),
+            b"We have 1,389 users. <!-- asof:users -->   \n\tindented \n")
+
+    def test_rewrite_keeps_a_missing_final_newline(self):
+        raw = b"We have 1,247 users. <!-- asof:users -->"
+        self.assertFalse(self.rewrite_bytes(raw).endswith(b"\n"))
+
+    def test_rewrite_keeps_mixed_line_endings(self):
+        raw = b"crlf line\r\nWe have 1,247 users. <!-- asof:users -->\nlf line\n"
+        self.assertEqual(
+            self.rewrite_bytes(raw),
+            b"crlf line\r\nWe have 1,389 users. <!-- asof:users -->\nlf line\n")
+
+    def test_rewrite_changes_exactly_the_value_bytes(self):
+        raw = b"We have 1,247 users. <!-- asof:users -->\r\n"
+        out = self.rewrite_bytes(raw, "1,389")
+        self.assertEqual(len(out), len(raw))
+        self.assertEqual(sum(a != b for a, b in zip(raw, out)), 3)  # 247 -> 389
+
     def test_rewrite_refuses_when_the_file_moved(self):
         self.write("README.md", "We have 1,247 users. <!-- asof:users -->")
         marker = scan.scan_tree(self.root, [], [])[0]
