@@ -1,0 +1,38 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+  schedule:
+    # Monday morning: nothing has changed, but time has passed, and time is
+    # the only thing that makes a manual claim go stale.
+    - cron: "0 8 * * 1"
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.10", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m unittest discover -s tests -t . -v
+
+  claims:
+    # The README's own numbers, checked by the tool the README describes.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Numbers a machine can settle
+        run: python -m asof check --fail-on drift,inconsistent,error,orphan
+      - name: Numbers a person must settle
+        if: always()
+        run: python -m asof check --no-run --fail-on stale

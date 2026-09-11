@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "claims": {
+    "dependencies": {
+      "value": "0",
+      "checked": "2026-09-11T23:29:08Z",
+      "source": "run"
+    },
+    "source-lines": {
+      "value": "1,985",
+      "checked": "2026-09-11T23:29:08Z",
+      "source": "run"
+    },
+    "test-count": {
+      "value": "85",
+      "checked": "2026-09-11T23:29:08Z",
+      "source": "run"
+    }
+  }
+}

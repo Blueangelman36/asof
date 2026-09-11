@@ -1,0 +1,149 @@
+import tempfile
+import unittest
+from pathlib import Path
+
+from asof import scan
+
+
+def names(markers):
+    return [(m.name, m.token) for m in markers]
+
+
+class TestScanText(unittest.TestCase):
+    def test_binds_the_value_before_it(self):
+        got = scan.scan_text("We support 47 integrations.  <!-- asof:integrations -->",
+                             Path("a.md"))
+        self.assertEqual(names(got), [("integrations", "47")])
+
+    def test_works_in_any_comment_syntax(self):
+        text = "\n".join([
+            "TIMEOUT_MS = 250   # asof:p99",
+            "replicas: 12  # asof:replicas",
+            "const seats = 4_000;  // asof:seats",
+        ])
+        got = dict(names(scan.scan_text(text, Path("a.txt"))))
+        self.assertEqual(got["p99"], "250")
+        self.assertEqual(got["replicas"], "12")
+
+    def test_forward_marker(self):
+        got = scan.scan_text("<!-- asof:seats> --> 1,204 seats", Path("a.md"))
+        self.assertEqual(names(got), [("seats", "1,204")])
+        self.assertTrue(got[0].forward)
+
+    def test_marker_without_a_value_is_ignored(self):
+        self.assertEqual(scan.scan_text("nothing here  # asof:ghost", Path("a.txt")), [])
+
+    def test_dotted_and_dashed_names(self):
+        got = scan.scan_text("9 # asof:prod.web-servers", Path("a.txt"))
+        self.assertEqual(got[0].name, "prod.web-servers")
+
+    def test_off_switch_disables_the_file(self):
+        text = "asof:off\nWe support 47 things. <!-- asof:things -->"
+        self.assertEqual(scan.scan_text(text, Path("a.md")), [])
+
+    def test_off_does_not_swallow_similar_names(self):
+        got = scan.scan_text("3 # asof:offices", Path("a.txt"))
+        self.assertEqual(got[0].name, "offices")
+
+
+class TestMarkdownFences(unittest.TestCase):
+    SAMPLE = "\n".join([
+        "We support 47 integrations. <!-- asof:integrations -->",
+        "",
+        "```markdown",
+        "We support 9999 widgets. <!-- asof:example -->",
+        "```",
+        "",
+        "And 12 more. <!-- asof:more -->",
+    ])
+
+    def test_fences_are_skipped_in_markdown(self):
+        got = names(scan.scan_text(self.SAMPLE, Path("R.md")))
+        self.assertEqual(got, [("integrations", "47"), ("more", "12")])
+
+    def test_fences_can_be_opted_back_in(self):
+        got = names(scan.scan_text(self.SAMPLE, Path("R.md"), fenced=True))
+        self.assertEqual(len(got), 3)
+
+    def test_fences_only_apply_to_markdown(self):
+        got = names(scan.scan_text(self.SAMPLE, Path("R.txt")))
+        self.assertEqual(len(got), 3)
+
+    def test_tilde_fences(self):
+        text = "~~~\n5 <!-- asof:hidden -->\n~~~\n7 <!-- asof:shown -->"
+        self.assertEqual(names(scan.scan_text(text, Path("R.md"))), [("shown", "7")])
+
+
+class TestInlineCode(unittest.TestCase):
+    def test_markers_in_code_spans_are_documentation(self):
+        text = "Write `asof:NAME` in a comment. We have 47 of them. <!-- asof:real -->"
+        self.assertEqual(names(scan.scan_text(text, Path("R.md"))), [("real", "47")])
+
+    def test_off_inside_code_spans_does_not_disable_the_file(self):
+        # The README explains `asof:off`. That must not switch the README off.
+        text = "Put `asof:off` in a file to skip it.\n\nWe have 47 things. <!-- asof:things -->"
+        self.assertEqual(names(scan.scan_text(text, Path("R.md"))), [("things", "47")])
+
+    def test_off_outside_code_spans_still_disables_the_file(self):
+        text = "asof:off\n\nWe have 47 things. <!-- asof:things -->"
+        self.assertEqual(scan.scan_text(text, Path("R.md")), [])
+
+    def test_a_value_inside_backticks_is_still_a_value(self):
+        text = "We have `47` integrations. <!-- asof:integrations -->"
+        self.assertEqual(names(scan.scan_text(text, Path("R.md"))), [("integrations", "47")])
+
+    def test_masking_preserves_columns(self):
+        line = "a `code` b 47 c"
+        self.assertEqual(len(scan._mask_inline_code(line)), len(line))
+
+    def test_code_spans_only_matter_in_markdown(self):
+        text = "x = 3  # see `asof:pinned`"
+        self.assertEqual(names(scan.scan_text(text, Path("a.py"))), [("pinned", "3")])
+
+
+class TestTreeAndRewrite(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.addCleanup(self.tmp.cleanup)
+
+    def write(self, name, text):
+        path = self.root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+        return path
+
+    def test_scan_tree_finds_across_files(self):
+        self.write("README.md", "We have 47 integrations. <!-- asof:integrations -->")
+        self.write("docs/one.md", "Also 47 integrations. <!-- asof:integrations -->")
+        self.write("noise.bin", "\x00\x01binary asof:nope")
+        got = scan.scan_tree(self.root, [], [])
+        self.assertEqual(len(got), 2)
+
+    def test_include_and_exclude(self):
+        self.write("README.md", "8 <!-- asof:a -->")
+        self.write("CHANGELOG.md", "9 <!-- asof:b -->")
+        self.assertEqual(len(scan.scan_tree(self.root, ["README.md"], [])), 1)
+        self.assertEqual(len(scan.scan_tree(self.root, [], ["CHANGELOG.md"])), 1)
+
+    def test_skips_dot_git(self):
+        self.write(".git/config", "8 # asof:a")
+        self.assertEqual(scan.scan_tree(self.root, [], []), [])
+
+    def test_rewrite_touches_only_the_value(self):
+        path = self.write("README.md", "We have 1,247 users today.  <!-- asof:users -->\ntail\n")
+        marker = scan.scan_tree(self.root, [], [])[0]
+        scan.rewrite(self.root, marker, "1,389")
+        self.assertEqual(path.read_text(encoding="utf-8"),
+                         "We have 1,389 users today.  <!-- asof:users -->\ntail\n")
+
+    def test_rewrite_refuses_when_the_file_moved(self):
+        self.write("README.md", "We have 1,247 users. <!-- asof:users -->")
+        marker = scan.scan_tree(self.root, [], [])[0]
+        self.write("README.md", "Completely different 5 text. <!-- asof:users -->")
+        with self.assertRaises(ValueError):
+            scan.rewrite(self.root, marker, "1,389")
+
+
+if __name__ == "__main__":
+    unittest.main()

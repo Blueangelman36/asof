@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "asof"
+version = "0.1.0"
+description = "Every number in your docs is a claim about a moment that has already passed."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+keywords = ["documentation", "docs", "drift", "staleness", "ci", "linter"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Documentation",
+    "Topic :: Software Development :: Quality Assurance",
+]
+dependencies = []
+
+[project.scripts]
+asof = "asof.cli:entrypoint"
+
+[project.urls]
+Homepage = "https://github.com/Blueangelman36/asof"
+Source = "https://github.com/Blueangelman36/asof"
+
+[tool.setuptools]
+packages = ["asof"]
