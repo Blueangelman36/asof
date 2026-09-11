@@ -100,9 +100,16 @@ the doc, commit — resets the clock on its own.
 | `ERROR` | the command would not run |
 | `ORPHAN` | configured, but no longer written anywhere |
 
-`SPLIT` is the one people are surprised by. Mark the same name in the README, the
-landing page and the pitch deck, and `asof` will tell you the day they stop agreeing
-with each other — which is usually the day someone updated one of the three.
+`SPLIT` is the one people are surprised by, and the one that needs no command at all.
+Mark the same name in the README, in `config.toml` and in the Raspberry Pi profile,
+and `asof` tells you the day the three stop agreeing — which is usually the day
+somebody updated one of them. It compares across notation too, so a README saying
+`±2.5 kHz` stays tied to a config saying `tolerance_hz = 2500`, and prose saying
+`99%` stays tied to an HTML slider saying `max="99"`.
+
+Only `DRIFT` has a right answer to write, so `asof update` fixes those and tells you
+plainly what it left behind. Nothing else is safely automatable: when two files
+disagree, only a person knows which one is wrong.
 
 ## In CI
 
@@ -145,8 +152,20 @@ shelf life it has used. Useful as a quarterly "what do we still believe" review.
 - **`asof:off` anywhere a marker would be heard** excludes the whole file.
 - **`asof:NAME>`** (with a trailing `>`) binds the first value *after* the marker,
   for files where the comment has to come first.
-- **Formatting is not drift.** `1,247`, `1247` and `1.247k` are the same claim.
-  Units are not: `250ms` will never match `250s`.
+- **On a crowded line, put the marker right after the value you mean.** A marker
+  takes the *last* value before it, so at the end of
+  `<input min="50" max="99" step="1" value="70">` it claims the `70`. Two claims can
+  share a line the same way: `20<!-- asof:per-hour --> calls/hour,
+  200<!-- asof:per-day -->/day`.
+- **Formatting is not drift.** `1,247`, `1247` and `1.247k` are the same claim, and
+  so are `2.5 kHz` in prose and `2500` in a config file. Units are not: `250ms` will
+  never match `250s`.
+- **A quoted number is a number.** Config files quote what prose writes bare, so a
+  README saying `99%` still matches `max="99"` in HTML or `version = "3.11"` in TOML.
+  A quoted *word* stays a word, so `"low"` is a claim you can make about a setting.
+- **A unit may follow a space** — `2.5 kHz`, `250 ms`, `1.2 GB` — but only for units
+  on a known list. Otherwise "47 integrations" would read as 47 *integrations*, and
+  every noun in your docs would become a unit.
 - **`run` commands are shell commands from your own repo**, executed by `asof check`.
   That is the same trust you already extend to a Makefile, but it is worth saying out
   loud before you run `asof check` inside a pull request from a stranger.
@@ -155,8 +174,8 @@ shelf life it has used. Useful as a quarterly "what do we still believe" review.
 
 The README you are reading is under `asof`, which is the only honest way to ship this:
 
-- The whole tool is 1,985 lines of Python. <!-- asof:source-lines -->
-- It is covered by 85 tests. <!-- asof:test-count -->
+- The whole tool is 2,170 lines of Python. <!-- asof:source-lines -->
+- It is covered by 104 tests. <!-- asof:test-count -->
 - It has 0 third-party dependencies. <!-- asof:dependencies -->
 
 Those three numbers are checked on every push by [the workflow](.github/workflows/ci.yml).

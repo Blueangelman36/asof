@@ -67,7 +67,7 @@ class TestRenderLike(unittest.TestCase):
 
 class TestFind(unittest.TestCase):
     def test_last_wins(self):
-        self.assertEqual(values.find_last("v2 handles 1,204 rps  <!-- ")[0], "1,204")
+        self.assertEqual(values.find_last("v2 handles 1,204 rps  <!-- ")[0], "1,204 rps")
 
     def test_first_for_forward_markers(self):
         self.assertEqual(values.find_first(" --> 88 seats")[0], "88")
@@ -80,6 +80,80 @@ class TestFind(unittest.TestCase):
 
     def test_nothing_to_find(self):
         self.assertIsNone(values.find_last("no numbers here "))
+
+
+class TestSpacedUnits(unittest.TestCase):
+    """``2.5 kHz`` is one value; ``47 integrations`` is a value and a noun."""
+
+    def find(self, text):
+        hit = values.find_last(text)
+        return hit[0] if hit else None
+
+    def test_unit_after_a_space_is_part_of_the_value(self):
+        self.assertEqual(self.find("tolerance (default 2.5 kHz) because"), "2.5 kHz")
+        self.assertEqual(self.find("tail latency is 250 ms"), "250 ms")
+        self.assertEqual(self.find("we store 1.2 GB per day"), "1.2 GB")
+        self.assertEqual(self.find("resolved 99.9 % of traffic"), "99.9 %")
+
+    def test_a_bare_noun_is_not_a_unit(self):
+        self.assertEqual(self.find("We support 47 integrations."), "47")
+        self.assertEqual(self.find("There are 12 customers today"), "12")
+        self.assertEqual(self.find("84 unrecognised events collapsed"), "84")
+
+    def test_a_bare_multiplier_after_a_space_counts(self):
+        self.assertEqual(self.find("about 10 k requests"), "10 k")
+
+    def test_spans_are_exact(self):
+        text = "tolerance is 2.5 kHz here"
+        token, start, end = values.find_last(text)
+        self.assertEqual(text[start:end], token)
+
+    def test_spaced_units_survive_a_round_trip(self):
+        parsed = values.parse(self.find("tolerance is 2.5 kHz here"))
+        self.assertEqual(parsed.scaled, 2500)
+        self.assertEqual(values.render_like(3000, parsed), "3.0 kHz")
+
+    def test_a_unit_already_attached_is_not_extended(self):
+        self.assertEqual(self.find("250ms of budget"), "250ms")
+
+    def test_quoted_values_and_dates_are_left_alone(self):
+        self.assertEqual(self.find('effort = "low"'), '"low"')
+        self.assertEqual(self.find("audited 2026-09-11 by hand"), "2026-09-11")
+
+    def test_a_newline_is_not_a_space(self):
+        self.assertEqual(self.find("we saw 47\nms of nothing"), "47")
+
+
+class TestQuotedNumbers(unittest.TestCase):
+    """Config files quote what prose writes bare. One claim spans both."""
+
+    def test_a_quoted_number_is_a_number(self):
+        v = values.parse('"99"')
+        self.assertTrue(v.numeric)
+        self.assertEqual(v.scaled, 99)
+        self.assertEqual(v.quote, '"')
+
+    def test_single_quotes_too(self):
+        self.assertEqual(values.parse("'8420'").scaled, 8420)
+
+    def test_html_attribute_matches_prose_percentage(self):
+        # README: "restricted to 50-99%".  index.html: max="99"
+        self.assertTrue(values.compare(
+            values.parse("99%"), values.parse('"99"'), values.Tolerance("")))
+
+    def test_toml_string_version_matches_bare_version(self):
+        self.assertTrue(values.compare(
+            values.parse("3.11"), values.parse('"3.11"'), values.Tolerance("")))
+
+    def test_a_quoted_word_is_still_a_word(self):
+        v = values.parse('"claude-opus-5"')
+        self.assertFalse(v.numeric)
+        self.assertTrue(values.compare(
+            values.parse('"low"'), values.parse("low"), values.Tolerance("")))
+
+    def test_updating_writes_back_inside_the_quotes(self):
+        self.assertEqual(values.render_like(101, values.parse('"99"')), '"101"')
+        self.assertEqual(values.render_like(8500, values.parse("'8420'")), "'8500'")
 
 
 class TestTolerance(unittest.TestCase):

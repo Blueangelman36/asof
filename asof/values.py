@@ -10,7 +10,7 @@ updating a document does not also reformat it.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 # Multiplier suffixes. Case matters: ``M`` is mega, ``m`` is not milli (it is
 # almost always the start of a unit like ``ms``), so lowercase is left alone.
@@ -23,8 +23,19 @@ COMPOUND_UNITS = {
     "Hz", "hz", "W", "J", "wh", "Wh", "eV", "m", "g", "s",
 }
 
+# Units people write with a space in front: "2.5 kHz", "250 ms", "1.2 GB".
+# Deliberately a closed list. Without one, "47 integrations" would read as
+# 47 of the unit "integrations", and every noun in a document would be a unit.
+SPACED_UNITS = {
+    "%", "s", "ms", "us", "ns", "min", "h", "hr", "d",
+    "Hz", "hz", "b", "B", "bps", "Bps", "B/s", "b/s", "iB",
+    "m", "km", "cm", "mm", "g", "kg", "W", "kW", "J", "V", "A",
+    "dB", "dBm", "rps", "qps", "fps", "px", "pt", "°C", "°F", "C", "F",
+}
+
 _NUMBER = r"[+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?"
-_SUFFIX = r"(?:%|[A-Za-zµ][A-Za-zµ/]*)?"
+_SUFFIX_BODY = r"%|[A-Za-zµ°][A-Za-zµ°/]*"
+_SUFFIX = rf"(?:{_SUFFIX_BODY})?"
 
 NUMBER_RE = re.compile(rf"(?P<num>{_NUMBER})(?P<suffix>{_SUFFIX})")
 DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
@@ -50,6 +61,7 @@ class Value:
     grouped: bool = False      # were thousands separated by commas?
     decimals: int = 0          # how many digits after the point
     space: str = ""            # whitespace between number and suffix
+    quote: str = ""            # the quote character it was written inside, if any
 
     @property
     def numeric(self) -> bool:
@@ -77,11 +89,19 @@ def _split_suffix(suffix: str) -> tuple[str, str]:
 
 
 def parse(text: str) -> Value:
-    """Parse a single value token. Non-numeric text becomes an opaque Value."""
+    """Parse a single value token. Non-numeric text becomes an opaque Value.
+
+    A quoted number is a number. ``max="99"`` in HTML, ``"port": 8420`` in JSON
+    and ``version = "3.11"`` in TOML are all how configuration files spell
+    values that prose spells bare, and a claim should hold across the two.
+    """
     text = text.strip()
     quoted = QUOTED_RE.fullmatch(text)
     if quoted:
-        return Value(raw=text)
+        inner = parse(quoted.group("body"))
+        if not inner.numeric:
+            return Value(raw=text, quote=quoted.group("q"))
+        return replace(inner, raw=text, quote=quoted.group("q"))
 
     m = re.fullmatch(rf"(?P<num>{_NUMBER})(?P<space>\s*)(?P<suffix>{_SUFFIX})", text)
     if not m:
@@ -107,6 +127,28 @@ def _claimable(m) -> bool:
     return bool(m.group(0).strip("\"'").strip())
 
 
+_SPACED_SUFFIX_RE = re.compile(rf"[ \t]+({_SUFFIX_BODY})")
+
+
+def _with_spaced_unit(text: str, m) -> tuple[str, int, int]:
+    """Extend a bare number to swallow a unit written after a space.
+
+    ``2.5 kHz`` is one value; ``47 integrations`` is a value followed by a
+    noun. The only thing telling those apart is whether the word is a unit, so
+    this consults SPACED_UNITS and gives up quietly when it is not one.
+    """
+    found = (m.group(0), m.start(), m.end())
+    if m.group("number") is None or m.group("suffix"):
+        return found        # a quoted string, a date, or a unit already attached
+    tail = _SPACED_SUFFIX_RE.match(text, m.end())
+    if not tail:
+        return found
+    multiplier, unit = _split_suffix(tail.group(1))
+    if unit not in SPACED_UNITS and not (multiplier and not unit):
+        return found
+    return text[m.start():tail.end()], m.start(), tail.end()
+
+
 def find_last(text: str) -> tuple[str, int, int] | None:
     """Find the last claimable token in ``text``. Returns (token, start, end)."""
     last = None
@@ -115,14 +157,14 @@ def find_last(text: str) -> tuple[str, int, int] | None:
             last = m
     if last is None:
         return None
-    return last.group(0), last.start(), last.end()
+    return _with_spaced_unit(text, last)
 
 
 def find_first(text: str) -> tuple[str, int, int] | None:
     """Find the first claimable token in ``text``. Returns (token, start, end)."""
     for m in _TOKEN_RE.finditer(text):
         if _claimable(m):
-            return m.group(0), m.start(), m.end()
+            return _with_spaced_unit(text, m)
     return None
 
 
@@ -143,7 +185,8 @@ def render_like(number: float, template: Value) -> str:
     digits = f"{shown:.{template.decimals}f}"
     if template.grouped:
         digits = _group(digits)
-    return f"{digits}{template.space}{template.multiplier}{template.unit}"
+    body = f"{digits}{template.space}{template.multiplier}{template.unit}"
+    return f"{template.quote}{body}{template.quote}"
 
 
 class Tolerance:

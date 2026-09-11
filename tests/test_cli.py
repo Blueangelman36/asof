@@ -104,6 +104,27 @@ class TestUpdate(Base):
         self.assertEqual(code, 0)
         self.assertIn("Nothing to update", out)
 
+    def test_update_admits_what_it_cannot_settle(self):
+        # Drift has a right answer to write. An inconsistency does not, and
+        # update must not exit 0 as though the repo were clean.
+        self.write("README.md", "We have 1,247 users. <!-- asof:users -->\n"
+                                "Port 8080. <!-- asof:port -->")
+        self.write("docs/run.md", "Port 9090. <!-- asof:port -->")
+        self.write("asof.ini", f'[users]\nrun = {PY} -c "print(1389)"\n')
+        code, out, _ = self.run_cli("update")
+        self.assertEqual(code, 1)
+        self.assertIn("1,389", out)
+        self.assertIn("need a person", out)
+        self.assertIn("port", out)
+
+    def test_update_with_only_unsettleable_claims(self):
+        self.write("README.md", "Port 8080. <!-- asof:port -->")
+        self.write("docs/run.md", "Port 9090. <!-- asof:port -->")
+        code, out, _ = self.run_cli("update")
+        self.assertEqual(code, 1)
+        self.assertIn("Nothing to update", out)
+        self.assertIn("need a person", out)
+
 
 class TestOtherCommands(Base):
     def test_init_lists_what_it_found(self):

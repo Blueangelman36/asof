@@ -96,6 +96,24 @@ class TestInlineCode(unittest.TestCase):
         line = "a `code` b 47 c"
         self.assertEqual(len(scan._mask_inline_code(line)), len(line))
 
+    def test_a_code_span_wrapped_onto_the_next_line_is_still_code(self):
+        # asof's own README wraps a long example across a line break. Masking
+        # line by line would turn that example into two real claims.
+        text = ("share a line the same way: `20<!-- asof:per-hour --> calls/hour,\n"
+                "200<!-- asof:per-day -->/day`.\n"
+                "\n"
+                "We have 47 things. <!-- asof:things -->")
+        self.assertEqual(names(scan.scan_text(text, Path("R.md"))), [("things", "47")])
+
+    def test_masking_preserves_line_structure(self):
+        text = "a `one\ntwo` b\nc 47 d"
+        self.assertEqual(scan._mask_inline_code(text).count("\n"), text.count("\n"))
+        self.assertEqual(len(scan._mask_inline_code(text)), len(text))
+
+    def test_a_stray_backtick_does_not_swallow_the_document(self):
+        text = "an unmatched ` tick\n\nWe have 47 things. <!-- asof:things -->"
+        self.assertEqual(names(scan.scan_text(text, Path("R.md"))), [("things", "47")])
+
     def test_code_spans_only_matter_in_markdown(self):
         text = "x = 3  # see `asof:pinned`"
         self.assertEqual(names(scan.scan_text(text, Path("a.py"))), [("pinned", "3")])

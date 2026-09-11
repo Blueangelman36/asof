@@ -222,16 +222,17 @@ def cmd_update(root: Path, cfg, st, args) -> int:
     drifting = [r for r in results if r.status is Status.DRIFT]
 
     if not drifting:
-        print("Nothing to update - every number matches its command.")
+        print("Nothing to update - no number disagrees with its command.")
         if st.dirty and not args.dry_run:
             st.save()
-        return 0
+        return _report_leftovers(results)
 
     if args.dry_run:
         for r in drifting:
             for m in r.markers:
                 print(f"  {m.where}: {m.token} -> {r.suggestion}")
         print(f"\n{len(drifting)} claim(s) would change. Drop --dry-run to write them.")
+        _report_leftovers([r for r in results if r.status is not Status.DRIFT])
         return 1
 
     changed = core.update(root, drifting, st)
@@ -241,6 +242,23 @@ def cmd_update(root: Path, cfg, st, args) -> int:
             print(f"  {m.where}: {m.token} -> {r.suggestion}")
     edits = sum(len(r.markers) for r in changed)
     print(f"\nUpdated {len(changed)} claim(s) across {edits} place(s).")
+    return _report_leftovers(results)
+
+
+def _report_leftovers(results: list[core.Result]) -> int:
+    """Say what update could not fix, rather than exiting quietly on 'done'.
+
+    Only drift has a right answer to write. A claim that reads differently in
+    two files, or one whose command will not run, needs a person to decide -
+    and a silent exit 0 would imply there was nothing left to decide.
+    """
+    left = [r for r in results if r.status in core.FAILING]
+    if not left:
+        return 0
+    print(f"\n{len(left)} claim(s) update cannot settle - these need a person:")
+    for r in left:
+        print(f"  {core.SYMBOLS[r.status]:<6} {r.name}: {r.message}")
+    return 1
     return 0
 
 

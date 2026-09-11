@@ -85,13 +85,17 @@ def walk(root: Path, include: list[str], exclude: list[str]):
 
 OFF_RE = re.compile(r"asof\s*:\s*off(?![A-Za-z0-9._/-])")
 FENCE_RE = re.compile(r"^\s{0,3}(```+|~~~+)")
-INLINE_CODE_RE = re.compile(r"(?P<ticks>`+)(?P<body>.+?)(?P=ticks)")
+# An inline code span may wrap across a line break, but never across a blank
+# line. Getting that wrong invents claims out of a document's own examples.
+INLINE_CODE_RE = re.compile(r"(?P<ticks>`+)[^\n]*?(?:\n(?!\s*\n)[^\n]*?)*?(?P=ticks)")
 MARKDOWN = {".md", ".markdown", ".mdx"}
 
 
-def _mask_inline_code(line: str) -> str:
-    """Blank out `code spans`, preserving every column position."""
-    return INLINE_CODE_RE.sub(lambda m: " " * len(m.group(0)), line)
+def _mask_inline_code(text: str) -> str:
+    """Blank out `code spans`, preserving every line and column position."""
+    return INLINE_CODE_RE.sub(
+        lambda m: "".join(c if c == "\n" else " " for c in m.group(0)), text
+    )
 
 
 def _readable(text: str, path: Path, fenced: bool):
@@ -103,19 +107,26 @@ def _readable(text: str, path: Path, fenced: bool):
     for markers is masked; the value a marker binds is read from the real line,
     so `47` in backticks is still a perfectly good number.
     """
-    markdown = path.suffix.lower() in MARKDOWN and not fenced
+    lines = text.splitlines()
+    if path.suffix.lower() not in MARKDOWN or fenced:
+        yield from ((n, line, line) for n, line in enumerate(lines, start=1))
+        return
+
+    # Drop fenced blocks first, then mask code spans across what is left, so a
+    # span that wraps onto the next line is still masked as one span.
+    kept: list[tuple[int, str]] = []
     in_fence = ""
-    for line_no, line in enumerate(text.splitlines(), start=1):
-        if markdown:
-            fence = FENCE_RE.match(line)
-            if fence and (not in_fence or line.strip().startswith(in_fence)):
-                in_fence = "" if in_fence else fence.group(1)[0] * 3
-                continue
-            if in_fence:
-                continue
-            yield line_no, line, _mask_inline_code(line)
-        else:
-            yield line_no, line, line
+    for line_no, line in enumerate(lines, start=1):
+        fence = FENCE_RE.match(line)
+        if fence and (not in_fence or line.strip().startswith(in_fence)):
+            in_fence = "" if in_fence else fence.group(1)[0] * 3
+            continue
+        if not in_fence:
+            kept.append((line_no, line))
+
+    masked = _mask_inline_code("\n".join(line for _, line in kept)).split("\n")
+    for (line_no, line), searchable in zip(kept, masked):
+        yield line_no, line, searchable
 
 
 def scan_text(text: str, path: Path, fenced: bool = False) -> list[Marker]:
