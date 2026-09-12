@@ -31,6 +31,37 @@ SCAFFOLD = """; asof.ini - what each number in your documents is a claim about.
 
 """
 
+# Coding agents read the repository's instruction file and little else, so the
+# way to be used by one is to be written down there - in behavioural terms, at
+# the moment it matters, not as a description of what the tool is.
+#
+# The last rule is the load-bearing one. An agent told to make CI green can
+# always do that by deleting the marker, and will, unless told plainly not to.
+AGENTS_BLOCK = """## Checked numbers (`asof`)
+
+Some numbers in this repository's documents carry a trailing comment like
+`<!-- asof:dashboard-port -->` (or `# asof:dashboard-port` in config and code).
+Those numbers are claims that CI verifies against wherever the value really
+comes from, so they cannot quietly stop being true. `asof.ini` records what each
+one means and who or what settles it.
+
+What this asks of you:
+
+- **Changing a marked number is expected.** Keep the `asof:` comment on its line.
+- **Before changing a constant in code, ask whether a document states it too.**
+  Run `asof check`. If a README and a config file both name the same value, they
+  are one claim, and changing one without the other fails the build.
+- **Never delete an `asof:` comment to make a check pass.** That switches the
+  check off rather than fixing anything; `asof check` reports it as an orphan
+  and fails anyway.
+- **`asof check --json`** gives machine-readable results. Every failure carries a
+  `remedy` field with the next step.
+
+If `asof` is not on PATH, look for a vendored `asof.pyz` at the repository root
+and run `python asof.pyz check` - it is the whole tool in one file and needs no
+install step, no virtualenv and no network.
+"""
+
 # An `asof:NAME` marker is invisible in a rendered document and cryptic in a
 # raw one. Anyone who meets it for the first time while editing a sentence
 # deserves a sentence back, in the repo, not in this tool's README.
@@ -59,6 +90,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "init":
         return cmd_init(root, args)
+    if args.command == "agents":
+        print(AGENTS_BLOCK, end="")
+        return 0
 
     try:
         cfg = config.load(root)
@@ -123,6 +157,10 @@ def _build_parser() -> argparse.ArgumentParser:
 
     touch = subs.add_parser("touch", help="record that you have re-verified a claim by hand")
     touch.add_argument("names", nargs="+")
+
+    subs.add_parser(
+        "agents",
+        help="print instructions to paste into AGENTS.md or CLAUDE.md")
 
     sug = subs.add_parser(
         "suggest", help="list numbers in your docs that look like unclaimed claims")
@@ -229,8 +267,9 @@ def _print_table(results: list[core.Result], quiet: bool = False) -> None:
             print(line)
             if r.message and r.status in core.FAILING:
                 print(f"         {'':<{width}}  {r.message}")
-            if r.suggestion and r.status is Status.DRIFT:
-                print(f"         {'':<{width}}  fix with: asof update {r.name}")
+            remedy = core.remedy(r)
+            if remedy:
+                print(f"         {'':<{width}}  -> {remedy}")
 
     tally = {}
     for r in results:
@@ -246,6 +285,7 @@ def _as_dict(r: core.Result) -> dict:
         "document": r.document,
         "produced": r.produced,
         "message": r.message,
+        "remedy": core.remedy(r),
         "checked": state.to_iso(r.checked) if r.checked else None,
         "age_seconds": round(r.age) if r.age is not None else None,
         "every_seconds": round(r.claim.every) if r.claim.every else None,

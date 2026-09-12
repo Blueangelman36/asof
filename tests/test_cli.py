@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from asof import cli
+from asof import cli, config, core
 
 PY = sys.executable
 
@@ -194,6 +194,108 @@ class TestOtherCommands(Base):
             f"We support {n},200 tenants of type {n}." for n in range(1, 6)))
         self.assertLessEqual(self.run_cli("suggest", "-n", "2")[1].count("paste after it"), 2)
 
+    def test_agents_block_is_pasteable_markdown(self):
+        code, out, _ = self.run_cli("agents")
+        self.assertEqual(code, 0)
+        self.assertTrue(out.startswith("## "))
+        self.assertIn("asof check --json", out)
+
+    def test_agents_block_forbids_the_obvious_shortcut(self):
+        # An agent told to make CI green can always do it by deleting the
+        # marker. The block has to say not to, in as many words.
+        out = self.run_cli("agents")[1]
+        self.assertIn("Never delete an `asof:` comment", out)
+
+    def test_agents_needs_no_config_or_repo(self):
+        # It must work in a bare directory, before anything is set up.
+        self.assertEqual(self.run_cli("agents")[0], 0)
+
+
+class TestRemedies(Base):
+    """Every failure says what to do about it, in the log and in the JSON."""
+
+    def remedy_for(self, files):
+        for name, text in files.items():
+            self.write(name, text)
+        payload = json.loads(self.run_cli("check", "--json")[1])
+        return {row["name"]: row["remedy"] for row in payload}
+
+    def test_drift_names_the_update_command(self):
+        remedies = self.remedy_for({
+            "README.md": "We have 47 x. <!-- asof:a -->",
+            "asof.ini": f'[a]\nrun = {PY} -c "print(52)"\n'})
+        self.assertIn("asof update a", remedies["a"])
+
+    def test_an_inconsistency_says_to_keep_the_markers(self):
+        remedies = self.remedy_for({
+            "README.md": "47 <!-- asof:a -->", "docs.md": "52 <!-- asof:a -->"})
+        self.assertIn("keep the `asof:a` comment", remedies["a"])
+
+    def test_an_orphan_says_how_to_end_the_claim_properly(self):
+        remedies = self.remedy_for({"README.md": "nothing", "asof.ini": "[a]\nevery=1d\n"})
+        self.assertIn("delete [a] from asof.ini", remedies["a"])
+
+    def test_a_broken_command_points_at_the_config(self):
+        remedies = self.remedy_for({
+            "README.md": "We have 47 x. <!-- asof:a -->",
+            "asof.ini": "[a]\nrun = no-such-binary-xyz\n"})
+        self.assertIn("asof.ini", remedies["a"])
+
+    def test_a_healthy_claim_has_no_remedy(self):
+        remedies = self.remedy_for({
+            "README.md": "We have 47 x. <!-- asof:a -->",
+            "asof.ini": f'[a]\nrun = {PY} -c "print(47)"\n'})
+        self.assertEqual(remedies["a"], "")
+
+    def test_the_remedy_appears_in_the_human_log_too(self):
+        self.write("README.md", "47 <!-- asof:a -->")
+        self.write("docs.md", "52 <!-- asof:a -->")
+        out = self.run_cli("check")[1]
+        self.assertIn("-> make these agree", out)
+
+    def test_every_failing_status_has_one(self):
+        for status in core.FAILING:
+            with self.subTest(status=status):
+                result = core.Result("n", config.Claim("n"), status)
+                self.assertTrue(core.remedy(result))
+
+
+class TestSingleFileBuild(unittest.TestCase):
+    """The zipapp is how asof reaches a repo that will not pip install it."""
+
+    def test_it_builds_and_runs_with_no_install(self):
+        import subprocess
+
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
+        import build_pyz
+
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "asof.pyz"
+            build_pyz.build(target)
+            self.assertTrue(target.is_file())
+
+            work = Path(tmp) / "repo"
+            work.mkdir()
+            (work / "README.md").write_text("47 <!-- asof:a -->", encoding="utf-8")
+            (work / "docs.md").write_text("52 <!-- asof:a -->", encoding="utf-8")
+            proc = subprocess.run([PY, str(target), "-C", str(work), "check"],
+                                  capture_output=True, text=True, timeout=60)
+            self.assertEqual(proc.returncode, 1, proc.stderr)
+            self.assertIn("SPLIT", proc.stdout)
+
+    def test_it_carries_no_bytecode(self):
+        import zipfile
+
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
+        import build_pyz
+
+        with tempfile.TemporaryDirectory() as tmp:
+            target = build_pyz.build(Path(tmp) / "asof.pyz")
+            names = zipfile.ZipFile(target).namelist()
+            self.assertFalse([n for n in names if "__pycache__" in n or n.endswith(".pyc")])
+
+
+class TestHelp(Base):
     def test_no_command_prints_help(self):
         code, out, _ = self.run_cli()
         self.assertEqual(code, 0)

@@ -41,3 +41,27 @@ jobs:
       - name: Numbers a person must settle
         if: always()
         run: python -m asof check --no-run --fail-on stale
+
+  single-file:
+    # The zipapp is how asof reaches a repo that will not pip install it, so
+    # it is built and exercised on every push rather than at release time.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - run: python tools/build_pyz.py
+      - name: It runs with nothing installed
+        run: |
+          mkdir -p /tmp/probe
+          printf 'We have 47 things. <!-- asof:things -->
+' > /tmp/probe/README.md
+          printf '52 things. <!-- asof:things -->
+' > /tmp/probe/docs.md
+          python dist/asof.pyz -C /tmp/probe check && exit 1
+          echo "caught the split, as it should"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: asof-pyz
+          path: dist/asof.pyz

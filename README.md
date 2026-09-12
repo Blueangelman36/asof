@@ -95,9 +95,12 @@ $ asof check
   ok     integrations          47    README.md:14
   DRIFT  p99-latency           250   docs/perf.md:31
                                      document says 250, command says 312ms
-                                     fix with: asof update p99-latency
+                                     -> run `asof update p99-latency` to take the
+                                        command's answer
   STALE  enterprise-customers  12    docs/sales.md:9
                                      last verified 114d ago, wanted every 90d
+                                     -> check it by hand, then `asof touch
+                                        enterprise-customers`
 
 3 claim(s): 1 drift, 1 ok, 1 stale
 ```
@@ -154,8 +157,8 @@ disagree, only a person knows which one is wrong.
 
 ```yaml
 - run: pip install asof
-- run: asof check                       # what a machine can settle
-- run: asof check --no-run --fail-on stale             # what a person must settle
+- run: asof check                            # what a machine can settle
+- run: asof check --no-run --fail-on stale   # what a person must settle
 ```
 
 Splitting it in two is deliberate. The first command is a build failure: a number in
@@ -164,6 +167,41 @@ scheduled job that opens an issue than as something that blocks a merge.
 
 For a number whose command only runs somewhere with credentials, `asof check --no-run`
 judges it by age alone and never executes anything.
+
+## For coding agents
+
+An agent almost never meets a tool by reading its README. It meets one when CI
+goes red on a change it just made, and whatever that log says is the only
+documentation it gets. So every failure names its own next step:
+
+```text
+  SPLIT  dashboard-port  8420  README.md:64 (+3)
+                         one claim, several numbers: 8420 at README.md:64, 8500 at config.pi.toml:30
+                         -> make these agree - edit whichever is wrong, and keep
+                            the `asof:dashboard-port` comment on each line
+```
+
+That line is in `asof check --json` too, as a `remedy` field on every failure,
+so an agent can act on it without parsing prose.
+
+Two more things make the difference between a tool agents trip over and one
+they use:
+
+```bash
+asof agents >> AGENTS.md        # the behavioural rules, for the file agents read
+python tools/build_pyz.py       # dist/asof.pyz - the whole tool in one 80 KB file
+```
+
+`asof agents` writes the instructions in the form an agent needs them: change
+marked numbers freely, check before changing a constant that a document also
+states, and **never delete an `asof:` comment to make a check pass.** That last
+rule matters more than the rest put together — deleting the marker is the
+shortest path to a green build, and it is exactly the failure `asof` exists to
+prevent. Orphaned claims fail the build by default for the same reason.
+
+The single-file build is for repositories that will not take a dependency.
+It is stdlib-only, so the whole tool fits in a zipapp: commit `asof.pyz`, run
+`python asof.pyz check`, no install step and no network.
 
 ## The lockfile
 
@@ -213,8 +251,8 @@ shelf life it has used. Useful as a quarterly "what do we still believe" review.
 
 The README you are reading is under `asof`, which is the only honest way to ship this:
 
-- The whole tool is 3,922 lines of Python. <!-- asof:source-lines -->
-- It is covered by 192 tests. <!-- asof:test-count -->
+- The whole tool is 4,135 lines of Python. <!-- asof:source-lines -->
+- It is covered by 204 tests. <!-- asof:test-count -->
 - It has 0 third-party dependencies. <!-- asof:dependencies -->
 
 Those three numbers are checked on every push by [the workflow](.github/workflows/ci.yml).

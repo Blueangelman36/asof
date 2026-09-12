@@ -53,6 +53,31 @@ SYMBOLS = {
     Status.NEW: "new",
 }
 
+# What to do about it, in one line, next to the thing that went wrong.
+#
+# Most people - and every automated agent - meet asof for the first time in a
+# CI log, having changed a number without knowing anything was watching it.
+# Whatever that log says is the entire documentation they get, so it has to say
+# what to do rather than only what happened.
+REMEDY = {
+    Status.DRIFT: ("run `asof update {name}` to take the command's answer, or fix the "
+                   "command in asof.ini if the document is the one that is right"),
+    Status.INCONSISTENT: ("make these agree - edit whichever is wrong, and keep the "
+                          "`asof:{name}` comment on each line"),
+    Status.STALE: ("check it by hand, then `asof touch {name}` - or just correct the "
+                   "number in the document, which counts as checking it"),
+    Status.ERROR: ("fix `run` under [{name}] in asof.ini, or use `asof check --no-run` "
+                   "where that command cannot be executed"),
+    Status.ORPHAN: ("put the `asof:{name}` comment back on the line it belongs to, or "
+                    "delete [{name}] from asof.ini if that number is gone for good"),
+}
+
+
+def remedy(result: "Result") -> str:
+    """The one-line next step for a failing claim, or "" when nothing is wrong."""
+    template = REMEDY.get(result.status)
+    return template.format(name=result.name) if template else ""
+
 
 @dataclass
 class Result:
