@@ -17,9 +17,11 @@ someone to look again when it expires.
 No dependencies. Python 3.10+.
 
 ```bash
-git clone https://github.com/Blueangelman36/asof
-pip install -e asof          # or run it in place: python -m asof
+pip install git+https://github.com/Blueangelman36/asof
 ```
+
+Or take the single file and skip installing anything: `python asof.pyz check`
+works from a bare interpreter with no virtualenv and no network.
 
 ### Adopting it on a repo that has none of this
 
