@@ -149,22 +149,25 @@ def _with_spaced_unit(text: str, m) -> tuple[str, int, int]:
     return text[m.start():tail.end()], m.start(), tail.end()
 
 
+def iter_values(text: str):
+    """Yield (token, start, end) for every claimable value in ``text``."""
+    for m in _TOKEN_RE.finditer(text):
+        if _claimable(m):
+            yield _with_spaced_unit(text, m)
+
+
 def find_last(text: str) -> tuple[str, int, int] | None:
     """Find the last claimable token in ``text``. Returns (token, start, end)."""
     last = None
-    for m in _TOKEN_RE.finditer(text):
-        if _claimable(m):
-            last = m
-    if last is None:
-        return None
-    return _with_spaced_unit(text, last)
+    for hit in iter_values(text):
+        last = hit
+    return last
 
 
 def find_first(text: str) -> tuple[str, int, int] | None:
     """Find the first claimable token in ``text``. Returns (token, start, end)."""
-    for m in _TOKEN_RE.finditer(text):
-        if _claimable(m):
-            return _with_spaced_unit(text, m)
+    for hit in iter_values(text):
+        return hit
     return None
 
 

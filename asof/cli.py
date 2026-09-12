@@ -7,7 +7,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import __version__, config, core, report, scan, state
+from . import __version__, config, core, report, scan, state, suggest
 from .core import Status
 
 DEFAULT_FAIL_ON = "drift,inconsistent,error"
@@ -48,6 +48,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_list(root, cfg, st, args)
     if args.command == "touch":
         return cmd_touch(root, cfg, st, args)
+    if args.command == "suggest":
+        return cmd_suggest(root, cfg, args)
     if args.command == "report":
         return cmd_report(root, cfg, st, args)
     parser.print_help()
@@ -89,6 +91,13 @@ def _build_parser() -> argparse.ArgumentParser:
 
     touch = subs.add_parser("touch", help="record that you have re-verified a claim by hand")
     touch.add_argument("names", nargs="+")
+
+    sug = subs.add_parser(
+        "suggest", help="list numbers in your docs that look like unclaimed claims")
+    sug.add_argument("-n", "--limit", type=int, default=15,
+                     help="how many to show (default 15, 0 for all)")
+    sug.add_argument("--why", action="store_true", help="show why each one was picked")
+    sug.add_argument("--json", action="store_true")
 
     rep = subs.add_parser("report", help="write an HTML board of every claim by age")
     rep.add_argument("-o", "--output", default="asof.html")
@@ -298,6 +307,78 @@ def cmd_touch(root: Path, cfg, st, args) -> int:
     for name in missing:
         print(f"no marker found for {name!r}", file=sys.stderr)
     return 1 if missing else 0
+
+
+# ------------------------------------------------------------------------ suggest
+
+
+def cmd_suggest(root: Path, cfg, args) -> int:
+    markers = scan.scan_tree(root, cfg.include, cfg.exclude, cfg.fenced)
+    claimed = {(m.path.as_posix(), m.line_no, m.start) for m in markers}
+    found = suggest.collect(root, cfg, claimed)
+
+    if args.json:
+        print(json.dumps([{
+            "value": c.token,
+            "file": c.path.as_posix(),
+            "line": c.line_no,
+            "score": c.score,
+            "name": c.suggested_name,
+            "marker": c.marker,
+            "echoes": c.echoes,
+            "reasons": c.reasons,
+            "context": c.context,
+        } for c in found], indent=2))
+        return 0
+
+    if not found:
+        if markers:
+            print(f"Nothing unclaimed worth flagging - {len(markers)} marker(s) already placed.")
+        else:
+            print("No candidate numbers found in your documents.")
+        return 0
+
+    shown = found if args.limit == 0 else found[: args.limit]
+    print(f"{len(found)} unclaimed number(s) in your documents. "
+          "The ones written in more than one place come first,\n"
+          "because those are already two people's job to remember:\n")
+    for c in shown:
+        print(f"  {c.token:<12} {c.where}")
+        print(f"  {'':<12} {_clip(c.context)}")
+        if c.echoes:
+            print(f"  {'':<12} same number at {_clip(', '.join(c.echoes), 58)}")
+        if c.sites:
+            print(f"  {'':<12} also unclaimed at {_clip(', '.join(c.sites), 55)}")
+        print(f"  {'':<12} paste after it:  {c.marker}")
+        if args.why:
+            for reason in c.reasons:
+                print(f"  {'':<12}   - {reason}")
+        print()
+
+    if len(found) > len(shown):
+        print(f"{len(found) - len(shown)} more. Use --limit 0 to see them all.")
+    print("None of this is a claim yet. Paste a marker, then run: asof init")
+    return 0
+
+
+def _clip(text: str, width: int = 74) -> str:
+    text = _printable(text)
+    return text if len(text) <= width else text[: width - 1] + "..."
+
+
+def _printable(text: str) -> str:
+    """Quoted context comes from someone else's file, on someone else's console.
+
+    A Windows terminal in a legacy code page cannot print an em dash, and a
+    suggestion is not worth a UnicodeEncodeError, so anything the console
+    cannot spell is replaced rather than raised.
+    """
+    encoding = getattr(sys.stdout, "encoding", None) or "utf-8"
+    try:
+        text.encode(encoding)
+    except (UnicodeEncodeError, LookupError):
+        return text.encode(encoding, "replace").decode(encoding, "replace")
+    return text
 
 
 # ------------------------------------------------------------------------- report

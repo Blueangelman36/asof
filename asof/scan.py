@@ -98,7 +98,7 @@ def _mask_inline_code(text: str) -> str:
     )
 
 
-def _readable(text: str, path: Path, fenced: bool):
+def readable(text: str, path: Path, fenced: bool):
     """Yield (line_no, line, searchable) for the parts of a file that speak.
 
     In Markdown, fenced blocks and inline code spans are showing syntax rather
@@ -134,11 +134,11 @@ def scan_text(text: str, path: Path, fenced: bool = False) -> list[Marker]:
 
     A file that says ``asof:off`` where it would be heard is skipped entirely.
     """
-    readable = list(_readable(text, path, fenced))
-    if any(OFF_RE.search(searchable) for _, _, searchable in readable):
+    speaking = list(readable(text, path, fenced))
+    if any(OFF_RE.search(searchable) for _, _, searchable in speaking):
         return []
     found: list[Marker] = []
-    for line_no, line, searchable in readable:
+    for line_no, line, searchable in speaking:
         for m in MARKER.finditer(searchable):
             forward = bool(m.group("forward"))
             if forward:

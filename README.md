@@ -21,6 +21,40 @@ git clone https://github.com/Blueangelman36/asof
 pip install -e asof          # or run it in place: python -m asof
 ```
 
+### Adopting it on a repo that has none of this
+
+`asof suggest` reads your documents and tells you which numbers look like claims
+somebody will forget to update, worst first:
+
+```text
+$ asof suggest
+24 unclaimed number(s) in your documents. The ones written in more than one place
+come first, because those are already two people's job to remember:
+
+  2.5 kHz      README.md:310
+               tolerance (default ±2.5 kHz) because receivers drift with temperature
+               same number at aliases.example.toml:10, voice/aliases.py:37
+               paste after it:  <!-- asof:tolerance-default -->
+
+  8420         README.md:64
+               Dashboard at <http://127.0.0.1:8420>.
+               same number at config.pi.toml:30, config.toml:6, dashboard/server.py:8
+               paste after it:  <!-- asof:dashboard-http -->
+```
+
+The ranking is one idea: **a number written in a document and again in a config file
+is a constant stated twice by two people who will not both remember to change it.**
+That is the shape of claim worth catching, and it takes a count rather than a
+judgement. Round numbers are discounted — 50 and 100 and 24 are in every stylesheet
+ever written, so sharing one means nothing — and a value that turns up in eight files
+is a constant of the codebase, not a claim about it. Add `--why` to see the reasoning
+for each, and `--json` to pipe it somewhere.
+
+The name it proposes is a guess from the surrounding words, meant to be edited. When
+there is no real word to use it says `NAME` rather than inventing one.
+
+### Marking a number
+
 Mark a number by writing `asof:NAME` in whatever passes for a comment in that file.
 The marker claims the last value on the line before it:
 
@@ -174,8 +208,8 @@ shelf life it has used. Useful as a quarterly "what do we still believe" review.
 
 The README you are reading is under `asof`, which is the only honest way to ship this:
 
-- The whole tool is 2,215 lines of Python. <!-- asof:source-lines -->
-- It is covered by 109 tests. <!-- asof:test-count -->
+- The whole tool is 2,730 lines of Python. <!-- asof:source-lines -->
+- It is covered by 133 tests. <!-- asof:test-count -->
 - It has 0 third-party dependencies. <!-- asof:dependencies -->
 
 Those three numbers are checked on every push by [the workflow](.github/workflows/ci.yml).

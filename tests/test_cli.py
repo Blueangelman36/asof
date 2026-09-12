@@ -157,6 +157,33 @@ class TestOtherCommands(Base):
         self.assertEqual(self.run_cli("report", "-o", "board.html")[0], 0)
         self.assertIn("<title>", (self.root / "board.html").read_text(encoding="utf-8"))
 
+    def test_suggest_points_at_the_repeated_number(self):
+        self.write("README.md", "The dashboard listens on 8420 by default.")
+        self.write("config.toml", "dashboard_port = 8420")
+        code, out, _ = self.run_cli("suggest")
+        self.assertEqual(code, 0)
+        self.assertIn("8420", out)
+        self.assertIn("config.toml:1", out)
+        self.assertIn("<!-- asof:", out)
+
+    def test_suggest_json(self):
+        self.write("README.md", "The dashboard listens on 8420 by default.")
+        self.write("config.toml", "dashboard_port = 8420")
+        payload = json.loads(self.run_cli("suggest", "--json")[1])
+        self.assertEqual(payload[0]["value"], "8420")
+        self.assertEqual(payload[0]["file"], "README.md")
+
+    def test_suggest_says_so_when_everything_is_claimed(self):
+        self.write("README.md", "The dashboard listens on 8420. <!-- asof:port -->")
+        code, out, _ = self.run_cli("suggest")
+        self.assertEqual(code, 0)
+        self.assertIn("already placed", out)
+
+    def test_suggest_limit(self):
+        self.write("README.md", "\n".join(
+            f"We support {n},200 tenants of type {n}." for n in range(1, 6)))
+        self.assertLessEqual(self.run_cli("suggest", "-n", "2")[1].count("paste after it"), 2)
+
     def test_no_command_prints_help(self):
         code, out, _ = self.run_cli()
         self.assertEqual(code, 0)
