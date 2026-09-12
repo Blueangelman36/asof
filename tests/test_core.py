@@ -1,3 +1,4 @@
+import re
 import sys
 import tempfile
 import unittest
@@ -217,7 +218,28 @@ class TestReport(Base):
         html = report.render(results, "demo")
         self.assertIn("<title>", html)
         for status in Status:
-            self.assertIn(status.value, html)
+            self.assertIn(report.LABEL[status], html)
+            self.assertIn(report.BLURB[status], html)
+
+    def test_every_colour_is_defined_before_a_theme_block_redefines_it(self):
+        # A token that only exists inside a media query renders one theme's
+        # text on the other theme's ground.
+        css = report.CSS
+        base = css[css.index(":root{"):css.index("@media")]
+        declared = set(re.findall(r"(--[a-z-]+):", base))
+        used = set(re.findall(r"var\((--[a-z-]+)\)", css))
+        self.assertEqual(used - declared, set())
+
+    def test_both_themes_define_the_same_tokens(self):
+        blocks = re.findall(r"\{([^{}]*--[a-z-]+:[^{}]*)\}", report.CSS)
+        token_sets = [set(re.findall(r"(--[a-z-]+):", b)) for b in blocks]
+        colours = [s for s in token_sets if "--ink" in s]
+        self.assertEqual(len(colours), 3, "expected light, media-dark and stamped-dark")
+        self.assertEqual(colours[1], colours[2])
+        self.assertTrue(colours[1] <= colours[0])
+
+    def test_the_body_paints_its_own_background(self):
+        self.assertIn("background:var(--paper)", report.CSS)
 
     def test_escapes_document_values(self):
         claim = config.Claim("x", why="<script>alert(1)</script>")
