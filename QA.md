@@ -8,7 +8,7 @@ again.
 
 ## What was run
 
-- **The test suite**: 182 tests. <!-- asof:test-count -->
+- **The test suite**: 189 tests. <!-- asof:test-count -->
 - **An adversarial sweep** (`qa/sweep.py`): 53 hostile-input probes <!-- asof:qa-probes -->
   over encodings, malformed markers, broken config, damaged lockfiles, runaway
   commands and numbers that are not numbers, plus 17 invariants <!-- asof:qa-invariants -->
@@ -16,6 +16,9 @@ again.
 - **A packaging check**: `pip install` into a clean virtualenv, then the
   installed `asof` console script run against four real repositories.
 - **A performance check** on a synthetic tree of several hundred files.
+- **A clean-room run**: installed straight from the pushed repository into an
+  empty virtualenv, pointed at an Android project that had never been marked,
+  and taken through the whole adoption loop with the installed binary.
 
 The sweep asks a different question from the tests. The tests say what `asof`
 should do, one case at a time. The sweep says what it must never do — never
@@ -29,7 +32,15 @@ python qa/sweep.py
 
 ## What it found
 
-Nine defects, all now fixed and pinned by tests.
+Ten defects, all now fixed and pinned by tests.
+
+**A number could bind silently to the wrong value.** Kotlin, Python, Rust and
+Java group thousands with underscores, and `18_000` parsed as `18` followed by
+`000` — so a marker on that line would have claimed **0** and compared it, in
+earnest, against the 18,000 in the README. Not a crash: a confident wrong
+answer, which is the worst kind of bug for a tool whose entire job is to be
+trusted about numbers. Found by the clean-room run, on the first real file it
+touched.
 
 **The timeout was a message, not a limit.** `timeout = 1` against a command
 that sleeps for thirty seconds returned after thirty seconds, while reporting

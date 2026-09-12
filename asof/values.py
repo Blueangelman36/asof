@@ -33,7 +33,10 @@ SPACED_UNITS = {
     "dB", "dBm", "rps", "qps", "fps", "px", "pt", "°C", "°F", "C", "F",
 }
 
-_NUMBER = r"[+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?"
+# Thousands may be grouped with commas or underscores: 1,247 in prose and
+# 18_000 in Kotlin, Python, Rust or Java are the same number written twice.
+# Groups must be three digits, so an identifier like col_1_2 is not a number.
+_NUMBER = r"[+-]?(?:\d{1,3}(?:[,_]\d{3})+|\d+)(?:\.\d+)?"
 _SUFFIX_BODY = r"%|[A-Za-zµ°][A-Za-zµ°/]*"
 _SUFFIX = rf"(?:{_SUFFIX_BODY})?"
 
@@ -58,7 +61,7 @@ class Value:
     number: float | None = None
     multiplier: str = ""       # "k", "M", ... as written, "" if none
     unit: str = ""             # "ms", "B", "%", ... "" if none
-    grouped: bool = False      # were thousands separated by commas?
+    separator: str = ""        # the thousands separator used, "" if none
     decimals: int = 0          # how many digits after the point
     space: str = ""            # whitespace between number and suffix
     quote: str = ""            # the quote character it was written inside, if any
@@ -66,6 +69,10 @@ class Value:
     @property
     def numeric(self) -> bool:
         return self.number is not None
+
+    @property
+    def grouped(self) -> bool:
+        return bool(self.separator)
 
     @property
     def scaled(self) -> float | None:
@@ -109,14 +116,15 @@ def parse(text: str) -> Value:
 
     digits = m.group("num")
     multiplier, unit = _split_suffix(m.group("suffix") or "")
-    body = digits.replace(",", "")
+    separator = next((c for c in ",_" if c in digits), "")
+    body = digits.replace(",", "").replace("_", "")
     decimals = len(body.split(".")[1]) if "." in body else 0
     return Value(
         raw=text,
         number=float(body),
         multiplier=multiplier,
         unit=unit,
-        grouped="," in digits,
+        separator=separator,
         decimals=decimals,
         space=m.group("space") or "",
     )
@@ -181,11 +189,11 @@ def find_first(text: str) -> tuple[str, int, int] | None:
     return None
 
 
-def _group(digits: str) -> str:
+def _group(digits: str, separator: str = ",") -> str:
     neg = digits.startswith("-")
     digits = digits.lstrip("+-")
     whole, _, frac = digits.partition(".")
-    out = f"{int(whole):,}"
+    out = f"{int(whole):,}".replace(",", separator)
     if frac:
         out = f"{out}.{frac}"
     return ("-" if neg else "") + out
@@ -196,8 +204,8 @@ def render_like(number: float, template: Value) -> str:
     scale = MULTIPLIERS.get(template.multiplier, 1.0)
     shown = number / scale
     digits = f"{shown:.{template.decimals}f}"
-    if template.grouped:
-        digits = _group(digits)
+    if template.separator:
+        digits = _group(digits, template.separator)
     body = f"{digits}{template.space}{template.multiplier}{template.unit}"
     return f"{template.quote}{body}{template.quote}"
 

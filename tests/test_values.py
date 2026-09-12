@@ -82,6 +82,38 @@ class TestFind(unittest.TestCase):
         self.assertIsNone(values.find_last("no numbers here "))
 
 
+class TestUnderscoreSeparators(unittest.TestCase):
+    """Kotlin, Python, Rust and Java group thousands with underscores."""
+
+    def tokens(self, text):
+        return [t for t, _, _ in values.iter_values(text)]
+
+    def test_an_underscored_literal_is_one_number(self):
+        self.assertEqual(self.tokens("x = 18_000"), ["18_000"])
+        self.assertEqual(values.parse("18_000").scaled, 18000)
+
+    def test_several_groups(self):
+        self.assertEqual(values.parse("1_000_000").scaled, 1_000_000)
+
+    def test_it_matches_the_same_number_written_with_commas(self):
+        self.assertTrue(values.compare(
+            values.parse("18,000"), values.parse("18_000"), values.Tolerance("")))
+
+    def test_an_identifier_is_not_a_number(self):
+        # col_1_2 must not read as 1_2; groups have to be three digits.
+        self.assertEqual(self.tokens("col_1_2 = 5"), ["1", "2", "5"])
+
+    def test_a_trailing_identifier_number_still_reads(self):
+        line = 'BELOW_18000("Below 18,000 ft", 18_000),'
+        self.assertEqual(self.tokens(line), ["18000", '"Below 18,000 ft"', "18_000"])
+
+    def test_updating_keeps_the_underscore_style(self):
+        self.assertEqual(values.render_like(19500, values.parse("18_000")), "19_500")
+
+    def test_updating_keeps_the_comma_style(self):
+        self.assertEqual(values.render_like(1389, values.parse("1,247")), "1,389")
+
+
 class TestRangeDashes(unittest.TestCase):
     """A dash between two numbers is a range, not a minus sign."""
 
