@@ -188,9 +188,17 @@ Two more things make the difference between a tool agents trip over and one
 they use:
 
 ```bash
+asof skill                      # installs the Claude Code skill into this repo
 asof agents >> AGENTS.md        # the behavioural rules, for the file agents read
 python tools/build_pyz.py       # dist/asof.pyz - the whole tool in one 80 KB file
 ```
+
+`asof skill` writes `.claude/skills/asof/SKILL.md`, which Claude Code loads when a
+request touches this ground — a failing check, adopting `asof`, or changing a
+constant that a document might also state. That last trigger is the useful one:
+it arrives *before* the mistake rather than after CI catches it. The skill ships
+inside the package, so the copy you read on GitHub and the copy `pip` installs
+are asserted to be the same file.
 
 `asof agents` writes the instructions in the form an agent needs them: change
 marked numbers freely, check before changing a constant that a document also
@@ -251,8 +259,8 @@ shelf life it has used. Useful as a quarterly "what do we still believe" review.
 
 The README you are reading is under `asof`, which is the only honest way to ship this:
 
-- The whole tool is 4,135 lines of Python. <!-- asof:source-lines -->
-- It is covered by 204 tests. <!-- asof:test-count -->
+- The whole tool is 4,265 lines of Python. <!-- asof:source-lines -->
+- It is covered by 214 tests. <!-- asof:test-count -->
 - It has 0 third-party dependencies. <!-- asof:dependencies -->
 
 Those three numbers are checked on every push by [the workflow](.github/workflows/ci.yml).

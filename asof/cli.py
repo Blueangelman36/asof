@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from importlib import resources
 from pathlib import Path
 
 from . import __version__, config, core, report, scan, state, suggest
@@ -93,6 +94,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "agents":
         print(AGENTS_BLOCK, end="")
         return 0
+    if args.command == "skill":
+        return cmd_skill(root, args)
 
     try:
         cfg = config.load(root)
@@ -162,6 +165,13 @@ def _build_parser() -> argparse.ArgumentParser:
         "agents",
         help="print instructions to paste into AGENTS.md or CLAUDE.md")
 
+    skill = subs.add_parser(
+        "skill", help="install the Claude Code skill into .claude/skills/asof")
+    skill.add_argument("-f", "--force", action="store_true",
+                       help="overwrite an existing skill file")
+    skill.add_argument("--print", dest="show", action="store_true",
+                       help="write it to stdout instead of a file")
+
     sug = subs.add_parser(
         "suggest", help="list numbers in your docs that look like unclaimed claims")
     sug.add_argument("-n", "--limit", type=int, default=15,
@@ -212,6 +222,29 @@ def cmd_init(root: Path, args) -> int:
     else:
         print(f"wrote {path.name}. No markers yet - add one to a document:")
         print("\n    We support 47 integrations.   <!-- asof:integrations -->\n")
+    return 0
+
+
+def cmd_skill(root: Path, args) -> int:
+    """Write the packaged skill into the repository Claude Code will read it from."""
+    body = resources.files("asof").joinpath("skill.md").read_text(encoding="utf-8")
+    if args.show:
+        print(body, end="")
+        return 0
+
+    target = root / ".claude" / "skills" / "asof" / "SKILL.md"
+    if target.exists() and not args.force:
+        if target.read_text(encoding="utf-8") == body:
+            print(f"{target.relative_to(root).as_posix()} is already up to date.")
+            return 0
+        print(f"{target.relative_to(root).as_posix()} exists and differs "
+              "(use --force to overwrite)", file=sys.stderr)
+        return 1
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(body, encoding="utf-8")
+    print(f"wrote {target.relative_to(root).as_posix()}")
+    print("Claude Code will pick it up in this project from now on.")
     return 0
 
 

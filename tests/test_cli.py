@@ -260,6 +260,56 @@ class TestRemedies(Base):
                 self.assertTrue(core.remedy(result))
 
 
+class TestSkill(Base):
+    """The Claude Code skill, and the one copy of it that is allowed to exist."""
+
+    REPO = Path(__file__).resolve().parent.parent
+
+    def test_it_installs_where_claude_code_looks(self):
+        code, out, err = self.run_cli("skill")
+        self.assertEqual(code, 0, err)
+        target = self.root / ".claude" / "skills" / "asof" / "SKILL.md"
+        self.assertTrue(target.is_file())
+        self.assertIn("skills/asof/SKILL.md", out)
+
+    def test_it_has_the_frontmatter_a_skill_needs(self):
+        self.run_cli("skill")
+        body = (self.root / ".claude/skills/asof/SKILL.md").read_text(encoding="utf-8")
+        self.assertTrue(body.startswith("---\n"))
+        self.assertIn("\nname: asof\n", body)
+        self.assertRegex(body, r"\ndescription: \S")
+
+    def test_the_description_names_the_moments_it_should_trigger(self):
+        body = self.run_cli("skill", "--print")[1]
+        description = body.split("description:", 1)[1].split("\n", 1)[0]
+        for trigger in ("fails", "adopt", "constant"):
+            self.assertIn(trigger, description.lower())
+
+    def test_running_it_twice_is_not_an_error(self):
+        self.assertEqual(self.run_cli("skill")[0], 0)
+        code, out, _ = self.run_cli("skill")
+        self.assertEqual(code, 0)
+        self.assertIn("already up to date", out)
+
+    def test_it_refuses_to_clobber_a_modified_skill(self):
+        self.run_cli("skill")
+        target = self.root / ".claude/skills/asof/SKILL.md"
+        target.write_text("---\nname: asof\n---\nmine now", encoding="utf-8")
+        self.assertEqual(self.run_cli("skill")[0], 1)
+        self.assertIn("mine now", target.read_text(encoding="utf-8"))
+        self.assertEqual(self.run_cli("skill", "--force")[0], 0)
+        self.assertNotIn("mine now", target.read_text(encoding="utf-8"))
+
+    def test_this_repo_ships_exactly_what_the_package_ships(self):
+        # Two copies exist: the one pip installs and the one you read on
+        # GitHub. They are the same file or they are a lie.
+        packaged = (self.REPO / "asof" / "skill.md").read_text(encoding="utf-8")
+        checked_in = (self.REPO / ".claude" / "skills" / "asof" / "SKILL.md").read_text(
+            encoding="utf-8")
+        self.assertEqual(packaged, checked_in,
+                         "run `asof skill --force` to regenerate .claude/skills/asof")
+
+
 class TestSingleFileBuild(unittest.TestCase):
     """The zipapp is how asof reaches a repo that will not pip install it."""
 
@@ -282,6 +332,20 @@ class TestSingleFileBuild(unittest.TestCase):
                                   capture_output=True, text=True, timeout=60)
             self.assertEqual(proc.returncode, 1, proc.stderr)
             self.assertIn("SPLIT", proc.stdout)
+
+    def test_the_skill_survives_the_zipapp(self):
+        # importlib.resources has to reach inside the archive, not the filesystem.
+        import subprocess
+
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
+        import build_pyz
+
+        with tempfile.TemporaryDirectory() as tmp:
+            target = build_pyz.build(Path(tmp) / "asof.pyz")
+            proc = subprocess.run([PY, str(target), "skill", "--print"],
+                                  capture_output=True, text=True, timeout=60)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertIn("name: asof", proc.stdout)
 
     def test_it_carries_no_bytecode(self):
         import zipfile

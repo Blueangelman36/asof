@@ -148,6 +148,29 @@ class TestTreeAndRewrite(unittest.TestCase):
         self.write(".git/config", "8 # asof:a")
         self.assertEqual(scan.scan_tree(self.root, [], []), [])
 
+    def test_skips_a_virtualenv_whatever_it_is_called(self):
+        # Found by installing asof from a public URL into a venv named `v`:
+        # it scanned its own installed source and invented a claim from the
+        # example in its help text.
+        self.write("README.md", "We have 47 things. <!-- asof:things -->")
+        self.write("v/pyvenv.cfg", "home = /usr/bin")
+        self.write("v/Lib/site-packages/other/cli.py", "8420  # asof:borrowed")
+        found = [m.name for m in scan.scan_tree(self.root, [], [])]
+        self.assertEqual(found, ["things"])
+
+    def test_skips_site_packages_even_without_a_venv_marker(self):
+        self.write("README.md", "We have 47 things. <!-- asof:things -->")
+        self.write("lib/site-packages/dep/readme.md", "9000 <!-- asof:theirs -->")
+        found = [m.name for m in scan.scan_tree(self.root, [], [])]
+        self.assertEqual(found, ["things"])
+
+    def test_a_project_that_is_itself_a_venv_root_still_scans(self):
+        # pyvenv.cfg at the root means the user pointed asof at a venv on
+        # purpose; refusing to scan anything at all would be unhelpful.
+        self.write("pyvenv.cfg", "home = /usr/bin")
+        self.write("README.md", "We have 47 things. <!-- asof:things -->")
+        self.assertEqual([m.name for m in scan.scan_tree(self.root, [], [])], ["things"])
+
     def test_rewrite_touches_only_the_value(self):
         path = self.write("README.md", "We have 1,247 users today.  <!-- asof:users -->\ntail\n")
         marker = scan.scan_tree(self.root, [], [])[0]

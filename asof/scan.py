@@ -30,7 +30,14 @@ SKIP_DIRS = {
     ".git", ".hg", ".svn", "node_modules", "__pycache__", ".venv", "venv",
     ".mypy_cache", ".pytest_cache", ".ruff_cache", "dist", "build",
     ".tox", ".idea", ".next", "target", "vendor", ".gradle",
+    "site-packages", ".eggs", ".cargo", ".bundle",
 }
+
+# A virtualenv is not part of your project, whatever it happens to be called.
+# Matching on the name alone misses every env called `v` or `env3` or `.direnv`,
+# and the dependencies inside one are full of other people's documentation - so
+# asof would mine somebody else's README for claims about yours.
+VENV_MARKER = "pyvenv.cfg"
 
 MAX_BYTES = 2 * 1024 * 1024
 
@@ -67,6 +74,9 @@ def _is_probably_text(data: bytes) -> bool:
 def walk(root: Path, include: list[str], exclude: list[str]):
     """Yield candidate files under ``root``, honouring include/exclude globs."""
     for dirpath, dirnames, filenames in os.walk(root):
+        if VENV_MARKER in filenames and Path(dirpath) != root:
+            dirnames[:] = []
+            continue
         dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS and not d.startswith(".git"))
         for name in sorted(filenames):
             full = Path(dirpath) / name

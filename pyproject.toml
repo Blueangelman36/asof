@@ -30,3 +30,6 @@ Source = "https://github.com/Blueangelman36/asof"
 
 [tool.setuptools]
 packages = ["asof"]
+
+[tool.setuptools.package-data]
+asof = ["skill.md"]
