@@ -55,12 +55,13 @@ jobs:
       - name: It runs with nothing installed
         run: |
           mkdir -p /tmp/probe
-          printf 'We have 47 things. <!-- asof:things -->
-' > /tmp/probe/README.md
-          printf '52 things. <!-- asof:things -->
-' > /tmp/probe/docs.md
-          python dist/asof.pyz -C /tmp/probe check && exit 1
-          echo "caught the split, as it should"
+          echo 'We have 47 things. <!-- asof:things -->' > /tmp/probe/README.md
+          echo '52 things. <!-- asof:things -->' > /tmp/probe/docs.md
+          if python dist/asof.pyz -C /tmp/probe check; then
+            echo "the zipapp missed a split it should have caught"
+            exit 1
+          fi
+          echo "caught the split from a bare interpreter, as it should"
       - uses: actions/upload-artifact@v4
         with:
           name: asof-pyz
