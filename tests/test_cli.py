@@ -53,6 +53,16 @@ class TestCheck(Base):
         self.write("asof.ini", f'[things]\nrun = {PY} -c "raise SystemExit(9)"\n')
         self.assertEqual(self.run_cli("check")[0], 2)
 
+    def test_deleting_a_marker_fails_by_default(self):
+        # A checker that stays green when its markers vanish fails open.
+        self.write("README.md", "The cap is 20 calls/hour. <!-- asof:cap -->")
+        self.write("asof.ini", "[cap]\nevery = 90d\n")
+        self.run_cli("check")
+        self.write("README.md", "The cap is 20 calls/hour.")
+        code, out, _ = self.run_cli("check")
+        self.assertEqual(code, 1)
+        self.assertIn("ORPHAN", out)
+
     def test_fail_on_none_always_exits_zero(self):
         self.write("README.md", "We have 47 things. <!-- asof:things -->")
         self.write("asof.ini", f'[things]\nrun = {PY} -c "print(52)"\n')

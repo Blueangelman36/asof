@@ -132,7 +132,7 @@ the doc, commit — resets the clock on its own.
 | `STALE` | nobody has stood behind this in too long |
 | `SPLIT` | the same claim, two different numbers in two files |
 | `ERROR` | the command would not run |
-| `ORPHAN` | configured, but no longer written anywhere |
+| `ORPHAN` | a marker was deleted, so nobody is watching that number now |
 
 `SPLIT` is the one people are surprised by, and the one that needs no command at all.
 Mark the same name in the README, in `config.toml` and in the Raspberry Pi profile,
@@ -140,6 +140,11 @@ and `asof` tells you the day the three stop agreeing — which is usually the da
 somebody updated one of them. It compares across notation too, so a README saying
 `±2.5 kHz` stays tied to a config saying `tolerance_hz = 2500`, and prose saying
 `99%` stays tied to an HTML slider saying `max="99"`.
+
+`ORPHAN` fails the build by default, and that is the deliberate part. Someone edits a
+sentence, the marker goes with it, and the number silently stops being checked — a
+guard that stays green when its own markers disappear is worse than no guard, because
+you think you have one.
 
 Only `DRIFT` has a right answer to write, so `asof update` fixes those and tells you
 plainly what it left behind. Nothing else is safely automatable: when two files
@@ -149,7 +154,7 @@ disagree, only a person knows which one is wrong.
 
 ```yaml
 - run: pip install asof
-- run: asof check --fail-on drift,inconsistent,error   # what a machine can settle
+- run: asof check                       # what a machine can settle
 - run: asof check --no-run --fail-on stale             # what a person must settle
 ```
 
@@ -208,8 +213,8 @@ shelf life it has used. Useful as a quarterly "what do we still believe" review.
 
 The README you are reading is under `asof`, which is the only honest way to ship this:
 
-- The whole tool is 2,730 lines of Python. <!-- asof:source-lines -->
-- It is covered by 133 tests. <!-- asof:test-count -->
+- The whole tool is 2,789 lines of Python. <!-- asof:source-lines -->
+- It is covered by 135 tests. <!-- asof:test-count -->
 - It has 0 third-party dependencies. <!-- asof:dependencies -->
 
 Those three numbers are checked on every push by [the workflow](.github/workflows/ci.yml).

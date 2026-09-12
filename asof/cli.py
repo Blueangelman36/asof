@@ -10,7 +10,10 @@ from pathlib import Path
 from . import __version__, config, core, report, scan, state, suggest
 from .core import Status
 
-DEFAULT_FAIL_ON = "drift,inconsistent,error"
+# Orphan is in here on purpose. A claim whose marker has been deleted is a
+# number nobody is watching any more, and a checker that stays green when its
+# markers disappear fails open - the one thing a guard must never do.
+DEFAULT_FAIL_ON = "drift,inconsistent,error,orphan"
 
 SCAFFOLD = """; asof.ini - what each number in your documents is a claim about.
 ;
@@ -26,6 +29,26 @@ SCAFFOLD = """; asof.ini - what each number in your documents is a claim about.
 ; every = 90d
 ; exclude = CHANGELOG.md
 
+"""
+
+# An `asof:NAME` marker is invisible in a rendered document and cryptic in a
+# raw one. Anyone who meets it for the first time while editing a sentence
+# deserves a sentence back, in the repo, not in this tool's README.
+NOTE_PROMPT = """
+Markers are invisible once a document is rendered, so nobody meets one until
+they are editing a line and wondering whether to delete it. Paste this into
+your README or CONTRIBUTING so they don't have to guess:
+
+---8<---
+### The `asof:` comments
+
+Some numbers in these docs carry a comment like `<!-- asof:dashboard-port -->`.
+That number is checked in CI against wherever it really comes from, so it
+cannot quietly stop being true. `asof.ini` says what each one means.
+
+Editing the number is fine and expected - just keep the comment on the line.
+Deleting the comment turns the check off, and CI will say so.
+---8<---
 """
 
 
@@ -138,6 +161,7 @@ def cmd_init(root: Path, args) -> int:
         for name, group in sorted(grouped.items()):
             print(f"  {name:<24} {group[0].token:<12} {group[0].where}")
         print("\nFill in a `run` command for the ones a machine can answer.")
+        print(NOTE_PROMPT)
     else:
         print(f"wrote {path.name}. No markers yet - add one to a document:")
         print("\n    We support 47 integrations.   <!-- asof:integrations -->\n")

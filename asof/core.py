@@ -132,8 +132,20 @@ def _check_one(root, cfg, st, name, markers, run, record, moment) -> Result:
     age = (moment - checked).total_seconds() if checked else None
 
     if not markers:
-        return Result(name, claim, Status.ORPHAN, [],
-                      message="configured but never marked", checked=checked, age=age)
+        # Two very different situations wear the same status. One is a config
+        # entry typed ahead of its marker; the other is a marker someone
+        # deleted, which means a number that was being watched no longer is.
+        # The lockfile is what tells them apart, and the second deserves to
+        # say what was lost.
+        was = st.recorded_value(name)
+        if was is None:
+            message = "configured, but no marker for it exists yet"
+        else:
+            seen = config.format_duration(age) + " ago" if age else "just now"
+            message = (f"the marker for this was removed - it last read {was}, "
+                       f"checked {seen}")
+        return Result(name, claim, Status.ORPHAN, [], document=was or "",
+                      message=message, checked=checked, age=age)
 
     tolerance = values.Tolerance(claim.tolerance)
     first = markers[0].value

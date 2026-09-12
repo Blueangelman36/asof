@@ -166,6 +166,19 @@ class TestOrphans(Base):
         self.write("asof.ini", "[ghost]\nevery = 30d\n")
         results, _ = self.run_check()
         self.assertIs(results["ghost"].status, Status.ORPHAN)
+        self.assertIn("no marker for it exists yet", results["ghost"].message)
+
+    def test_a_deleted_marker_says_what_was_lost(self):
+        # The failure that matters: somebody edits the sentence, the marker
+        # goes with it, and the number stops being watched by anyone.
+        self.write("README.md", "The cap is 20 calls/hour. <!-- asof:cap -->")
+        self.write("asof.ini", "[cap]\nevery = 90d\n")
+        self.run_check()
+        self.write("README.md", "The cap is 20 calls/hour.")
+        results, _ = self.run_check()
+        self.assertIs(results["cap"].status, Status.ORPHAN)
+        self.assertIn("was removed", results["cap"].message)
+        self.assertIn("20", results["cap"].message)
 
 
 class TestExitCodes(Base):
