@@ -60,23 +60,32 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "init":
         return cmd_init(root, args)
 
-    cfg = config.load(root)
+    try:
+        cfg = config.load(root)
+    except config.ConfigError as exc:
+        print(f"asof: {exc}", file=sys.stderr)
+        return 2
     st = state.State.load(root)
 
-    if args.command == "check":
-        return cmd_check(root, cfg, st, args)
-    if args.command == "update":
-        return cmd_update(root, cfg, st, args)
-    if args.command == "list":
-        return cmd_list(root, cfg, st, args)
-    if args.command == "touch":
-        return cmd_touch(root, cfg, st, args)
-    if args.command == "suggest":
-        return cmd_suggest(root, cfg, args)
-    if args.command == "report":
-        return cmd_report(root, cfg, st, args)
-    parser.print_help()
-    return 0
+    handlers = {
+        "check": lambda: cmd_check(root, cfg, st, args),
+        "update": lambda: cmd_update(root, cfg, st, args),
+        "list": lambda: cmd_list(root, cfg, st, args),
+        "touch": lambda: cmd_touch(root, cfg, st, args),
+        "suggest": lambda: cmd_suggest(root, cfg, args),
+        "report": lambda: cmd_report(root, cfg, st, args),
+    }
+    handler = handlers.get(args.command)
+    if handler is None:
+        parser.print_help()
+        return 0
+    try:
+        return handler()
+    except core.UnknownClaim as exc:
+        print(f"asof: {exc}", file=sys.stderr)
+        if exc.known:
+            print(f"       known claims: {', '.join(exc.known)}", file=sys.stderr)
+        return 2
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -411,6 +420,7 @@ def _printable(text: str) -> str:
 def cmd_report(root: Path, cfg, st, args) -> int:
     results = core.check(root, cfg, st, run=not args.no_run, record=False)
     out = root / args.output
+    out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(report.render(results, root.name), encoding="utf-8")
     print(f"wrote {out.relative_to(root).as_posix() if out.is_relative_to(root) else out}")
     if args.open:

@@ -150,10 +150,20 @@ def _with_spaced_unit(text: str, m) -> tuple[str, int, int]:
 
 
 def iter_values(text: str):
-    """Yield (token, start, end) for every claimable value in ``text``."""
+    """Yield (token, start, end) for every claimable value in ``text``.
+
+    A sign directly after a digit is a range dash, not a minus: "50-99%" is two
+    numbers and "a 10-20% lift" is a span, so reading the second one as negative
+    would invent a claim nobody made.
+    """
     for m in _TOKEN_RE.finditer(text):
-        if _claimable(m):
-            yield _with_spaced_unit(text, m)
+        if not _claimable(m):
+            continue
+        token, start, end = _with_spaced_unit(text, m)
+        if token[:1] in "+-" and start > 0 and text[start - 1].isdigit():
+            start += 1
+            token = text[start:end]
+        yield token, start, end
 
 
 def find_last(text: str) -> tuple[str, int, int] | None:

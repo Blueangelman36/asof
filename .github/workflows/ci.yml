@@ -23,6 +23,11 @@ jobs:
           python-version: ${{ matrix.python }}
       - run: python -m unittest discover -s tests -t . -v
 
+      - name: Adversarial sweep
+        # Different question from the tests: never a traceback, never a quiet
+        # exit 0, never a write from a read-only command.
+        run: python qa/sweep.py
+
   claims:
     # The README's own numbers, checked by the tool the README describes.
     runs-on: ubuntu-latest
@@ -32,7 +37,7 @@ jobs:
         with:
           python-version: "3.13"
       - name: Numbers a machine can settle
-        run: python -m asof check --fail-on drift,inconsistent,error,orphan
+        run: python -m asof check
       - name: Numbers a person must settle
         if: always()
         run: python -m asof check --no-run --fail-on stale

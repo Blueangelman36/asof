@@ -13,6 +13,11 @@ from pathlib import Path
 LOCK_NAME = "asof.lock"
 VERSION = 1
 
+# How stale a confirmation may be before re-stamping it is worth a file write.
+# Staleness thresholds are days or months; an hour of slack is invisible to
+# them and removes the churn entirely.
+GRANULARITY = 3600
+
 
 def now() -> datetime:
     return datetime.now(timezone.utc).replace(microsecond=0)
@@ -45,9 +50,17 @@ class State:
             return cls(path)
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
+        except (OSError, json.JSONDecodeError, UnicodeDecodeError):
             return cls(path)
-        data.setdefault("claims", {})
+        # A lockfile is generated, so a damaged one is not worth an error - but
+        # it must not be trusted into a crash either. Anything not shaped like
+        # a lockfile is treated as no lockfile, and the next check rebuilds it.
+        if not isinstance(data, dict) or not isinstance(data.get("claims", {}), dict):
+            return cls(path)
+        data["claims"] = {
+            name: entry for name, entry in data.get("claims", {}).items()
+            if isinstance(entry, dict)
+        }
         return cls(path, data)
 
     def entry(self, name: str) -> dict:
@@ -60,10 +73,26 @@ class State:
         entry = self.entry(name)
         return entry.get("value") if "value" in entry else None
 
-    def record(self, name: str, value: str, source: str, moment: datetime | None = None) -> None:
+    def record(self, name: str, value: str, source: str, moment: datetime | None = None,
+               force: bool = False) -> None:
+        """Note that a claim was confirmed, without rewriting the file to say so twice.
+
+        Staleness is measured in days, so re-stamping an unchanged claim every
+        time anyone runs `asof check` buys nothing and costs a permanently
+        dirty working tree - the lockfile is meant to be committed, and a file
+        that changes on every read is a file people stop reading.
+        """
+        moment = moment or now()
+        if not force:
+            existing = self.entry(name)
+            previous = from_iso(existing.get("checked", ""))
+            unchanged = existing.get("value") == value and existing.get("source") == source
+            if unchanged and previous and 0 <= (moment - previous).total_seconds() < GRANULARITY:
+                return
+
         self.data["claims"][name] = {
             "value": value,
-            "checked": to_iso(moment or now()),
+            "checked": to_iso(moment),
             "source": source,
         }
         self.dirty = True

@@ -42,10 +42,36 @@ def dependencies() -> int:
     return len([item for item in match.group(1).split(",") if item.strip()])
 
 
+def qa_probes() -> int:
+    """Hostile-input cases in the adversarial sweep."""
+    return _sweep().len_probes()
+
+
+def qa_invariants() -> int:
+    """Properties the sweep holds asof to across every one of those inputs."""
+    return _sweep().len_invariants()
+
+
+def _sweep():
+    """Import the sweep lazily - it is a test harness, not a runtime dependency."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("sweep", ROOT / "qa" / "sweep.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    class Counts:
+        len_probes = staticmethod(lambda: len(module.probe_cases()))
+        len_invariants = staticmethod(lambda: len(module.invariant_cases()))
+    return Counts()
+
+
 FACTS = {
     "source-lines": source_lines,
     "test-count": test_count,
     "dependencies": dependencies,
+    "qa-probes": qa_probes,
+    "qa-invariants": qa_invariants,
 }
 
 

@@ -69,6 +69,43 @@ class TestWhatGetsSuggested(Base):
         self.assertEqual(len(found[0].sites), 2)
 
 
+class TestSingleFileWebApps(Base):
+    """A one-file web app is mostly stylesheet, and a stylesheet claims nothing."""
+
+    PAGE = ("<style>\n"
+            ".wrap { max-width: 1120px; padding: 30px 22px 72px; }\n"
+            "</style>\n"
+            "<p>Confidence is restricted to 50-99% here.</p>\n"
+            "<script>\n"
+            "const BUCKETS = [50, 60, 70, 80, 90];\n"
+            "</script>\n")
+
+    def test_css_and_js_numbers_are_not_candidates(self):
+        self.write("index.html", self.PAGE)
+        wheres = [c.where for c in self.collect()]
+        self.assertTrue(all(w == "index.html:4" for w in wheres), wheres)
+
+    def test_the_prose_in_the_page_still_counts(self):
+        self.write("index.html", self.PAGE)
+        self.assertIn("99%", self.tokens())
+
+    def test_a_marker_inside_a_script_still_works(self):
+        # Discovery skips code; a marker somebody typed there on purpose does not.
+        self.write("index.html", "<script>\nconst MAX = 99; // asof:ceiling\n</script>")
+        markers = scan.scan_tree(self.root, [], [])
+        self.assertEqual([(m.name, m.token) for m in markers], [("ceiling", "99")])
+
+    def test_layout_units_are_never_claims(self):
+        self.write("notes.md", "The gutter is 30px and the sidebar 18rem wide.")
+        self.assertEqual(self.tokens(), [])
+
+    def test_masking_keeps_line_numbers_honest(self):
+        self.write("index.html", self.PAGE)
+        found = self.collect()[0]
+        self.assertEqual(found.line_no, 4)
+        self.assertIn("Confidence", found.context)
+
+
 class TestRanking(Base):
     def test_a_round_number_everywhere_is_not_treated_as_corroborated(self):
         self.write("README.md", "It resolves 50% of traffic without credits.")

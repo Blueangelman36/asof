@@ -82,6 +82,30 @@ class TestFind(unittest.TestCase):
         self.assertIsNone(values.find_last("no numbers here "))
 
 
+class TestRangeDashes(unittest.TestCase):
+    """A dash between two numbers is a range, not a minus sign."""
+
+    def tokens(self, text):
+        return [t for t, _, _ in values.iter_values(text)]
+
+    def test_a_percentage_range(self):
+        self.assertEqual(self.tokens("restricted to 50-99% here"), ["50", "99%"])
+
+    def test_a_plain_range(self):
+        self.assertEqual(self.tokens("takes 10-20 seconds"), ["10", "20"])
+
+    def test_a_real_negative_survives(self):
+        self.assertEqual(self.tokens("drift of -47 points"), ["-47"])
+
+    def test_a_negative_after_a_word_survives(self):
+        self.assertEqual(self.tokens("delta was -3.5 overall"), ["-3.5"])
+
+    def test_the_span_still_matches_the_token(self):
+        text = "restricted to 50-99% here"
+        for token, start, end in values.iter_values(text):
+            self.assertEqual(text[start:end], token)
+
+
 class TestSpacedUnits(unittest.TestCase):
     """``2.5 kHz`` is one value; ``47 integrations`` is a value and a noun."""
 

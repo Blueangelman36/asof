@@ -136,15 +136,40 @@ def _inside_dotted_run(line: str, start: int, end: int) -> bool:
     return end + 1 < len(line) and line[end] == "." and line[end + 1].isdigit()
 
 
+HTML = {".html", ".htm"}
+HTML_CODE_RE = re.compile(r"<(script|style)\b.*?</\1\s*>", re.IGNORECASE | re.DOTALL)
+
+# Units that measure a layout, never a claim about the world. A stylesheet is
+# wall-to-wall numbers and not one of them is a promise to anybody.
+LAYOUT_UNITS = {"px", "pt", "em", "rem", "vh", "vw", "ch", "ex", "fr", "deg"}
+
+
+def _mask_html_code(text: str) -> str:
+    """Blank out <script> and <style> bodies, keeping every line and column.
+
+    A single-file web app is mostly stylesheet, so mining it for claims returns
+    padding values. This applies to *discovery* only - a marker somebody put
+    inside a script on purpose is still a marker, because they meant it.
+    """
+    return HTML_CODE_RE.sub(
+        lambda m: "".join(c if c == "\n" else " " for c in m.group(0)), text)
+
+
 def _numbers_in(text: str, path: Path, fenced: bool):
     """Yield (line_no, line, token, start, end) for every value in a file.
 
     Masking preserves column positions, so a span found in the searchable copy
     of a line addresses the same characters in the real one.
     """
-    for line_no, line, searchable in scan.readable(text, path, fenced):
+    raw = text.splitlines()
+    if path.suffix.lower() in HTML:
+        text = _mask_html_code(text)
+    for line_no, _, searchable in scan.readable(text, path, fenced):
+        line = raw[line_no - 1]          # quote the real line, search the masked one
         for token, start, end in values.iter_values(searchable):
             if _inside_dotted_run(line, start, end):
+                continue
+            if values.parse(line[start:end]).unit in LAYOUT_UNITS:
                 continue
             yield line_no, line, line[start:end], start, end
 

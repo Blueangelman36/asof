@@ -3,18 +3,43 @@
   "claims": {
     "dependencies": {
       "value": "0",
-      "checked": "2026-09-12T00:32:00Z",
+      "checked": "2026-09-12T03:25:34Z",
+      "source": "run"
+    },
+    "qa-invariants": {
+      "value": "17",
+      "checked": "2026-09-12T03:25:34Z",
+      "source": "run"
+    },
+    "qa-probes": {
+      "value": "53",
+      "checked": "2026-09-12T03:25:34Z",
       "source": "run"
     },
     "source-lines": {
-      "value": "2,789",
-      "checked": "2026-09-12T00:32:00Z",
+      "value": "3,736",
+      "checked": "2026-09-12T03:25:50Z",
       "source": "run"
     },
+    "suggest-after": {
+      "value": "18",
+      "checked": "2026-09-12T03:25:34Z",
+      "source": "manual"
+    },
+    "suggest-before": {
+      "value": "166",
+      "checked": "2026-09-12T03:25:34Z",
+      "source": "manual"
+    },
     "test-count": {
-      "value": "135",
-      "checked": "2026-09-12T00:32:00Z",
+      "value": "182",
+      "checked": "2026-09-12T03:25:59Z",
       "source": "run"
+    },
+    "timeout-bug": {
+      "value": "1.2s",
+      "checked": "2026-09-12T03:25:49Z",
+      "source": "manual"
     }
   }
 }

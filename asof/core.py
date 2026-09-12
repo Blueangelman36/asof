@@ -7,6 +7,9 @@ here is the group of markers that share a name.
 
 from __future__ import annotations
 
+import contextlib
+import os
+import signal
 import subprocess
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -28,6 +31,16 @@ class Status(str, Enum):
 
 
 FAILING = {Status.DRIFT, Status.STALE, Status.INCONSISTENT, Status.ERROR, Status.ORPHAN}
+
+
+class UnknownClaim(Exception):
+    """Asked about a claim that does not exist anywhere."""
+
+    def __init__(self, unknown: list[str], known: list[str]):
+        self.unknown = unknown
+        self.known = known
+        super().__init__(f"no such claim: {', '.join(unknown)}")
+
 
 SYMBOLS = {
     Status.OK: "ok",
@@ -63,31 +76,67 @@ class Result:
         return f"{first} (+{extra})" if extra else first
 
 
+def _kill_tree(proc: subprocess.Popen) -> None:
+    """Kill the command and everything it started.
+
+    ``shell=True`` means the child is a shell and the real work is its child.
+    Killing only the shell leaves the grandchild alive holding the pipes open,
+    so the read that follows blocks for as long as the runaway feels like -
+    which turns the timeout into a message rather than a limit.
+    """
+    if os.name == "nt":
+        try:
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                           capture_output=True, timeout=10)
+            return
+        except (OSError, subprocess.SubprocessError):
+            pass
+    else:
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            return
+        except (OSError, AttributeError):
+            pass
+    with contextlib.suppress(OSError):
+        proc.kill()
+
+
 def run_command(claim: config.Claim, root: Path, shell: str = "") -> tuple[bool, str, str]:
     """Run a claim's command. Returns (ok, output, error)."""
     cwd = root / claim.cwd if claim.cwd else root
     kwargs: dict = {}
     if shell:
         kwargs["executable"] = shell
+    if os.name != "nt":
+        kwargs["start_new_session"] = True   # gives the shell its own group to kill
+
     try:
-        proc = subprocess.run(
+        proc = subprocess.Popen(
             claim.run,
             shell=True,
             cwd=cwd,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=claim.timeout,
+            errors="replace",
             **kwargs,
         )
-    except subprocess.TimeoutExpired:
-        return False, "", f"timed out after {claim.timeout:g}s"
     except OSError as exc:
         return False, "", str(exc)
+
+    try:
+        out, err = proc.communicate(timeout=claim.timeout)
+    except subprocess.TimeoutExpired:
+        _kill_tree(proc)
+        with contextlib.suppress(subprocess.TimeoutExpired, OSError):
+            proc.communicate(timeout=10)
+        return False, "", f"timed out after {claim.timeout:g}s"
+
     if proc.returncode != 0:
-        detail = (proc.stderr or proc.stdout or "").strip().splitlines()
+        detail = (err or out or "").strip().splitlines()
         tail = detail[-1] if detail else "no output"
         return False, "", f"exit {proc.returncode}: {tail}"
-    lines = [ln.strip() for ln in proc.stdout.splitlines() if ln.strip()]
+    lines = [ln.strip() for ln in (out or "").splitlines() if ln.strip()]
     if not lines:
         return False, "", "command produced no output"
     return True, lines[-1], ""
@@ -117,6 +166,11 @@ def check(
 
     names = sorted(set(grouped) | set(cfg.claims))
     if only:
+        # A name that matches nothing is almost always a typo, and staying
+        # quiet about it means `asof check --only tyop` passes in CI forever.
+        unknown = sorted(set(only) - set(names))
+        if unknown:
+            raise UnknownClaim(unknown, names)
         wanted = set(only)
         names = [n for n in names if n in wanted]
 
@@ -250,7 +304,7 @@ def touch(st: state.State, results: list[Result], names: list[str],
         result = by_name.get(name)
         if result is None or not result.markers:
             continue
-        st.record(name, result.document, "manual", moment)
+        st.record(name, result.document, "manual", moment, force=True)
         done.append(name)
     return done
 
