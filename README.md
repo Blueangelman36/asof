@@ -170,6 +170,26 @@ scheduled job that opens an issue than as something that blocks a merge.
 For a number whose command only runs somewhere with credentials, `asof check --no-run`
 judges it by age alone and never executes anything.
 
+### Exit codes
+
+Written down as a contract, so a CI step, a hook or an agent can rely on it:
+
+| Code | Meaning |
+|---|---|
+| `0` | nothing to say — every claim in scope holds |
+| `1` | something is blocking: a number is wrong, or nobody has stood behind it |
+| `2` | asof could not do its job: a claim's command would not run, or asof itself was used wrong (bad flag, unknown claim name, unreadable `asof.ini`) |
+
+`2` covers both halves of "could not do its job", because from CI's point of view a
+command that will not run and a config that will not parse are the same event: asof
+reached no verdict, and a green build would be a lie either way.
+
+The two halves differ in one respect worth knowing. `--fail-on` governs the first —
+`asof check --fail-on none` exits `0` even when a claim's command is broken, which is
+what you want on a branch where that command cannot run. It does not govern the
+second: a bad flag or an unreadable `asof.ini` exits `2` whatever `--fail-on` says,
+since asof never got as far as having statuses to filter.
+
 ## For coding agents
 
 An agent almost never meets a tool by reading its README. It meets one when CI
@@ -212,6 +232,21 @@ prevent. Orphaned claims fail the build by default for the same reason.
 The single-file build is for repositories that will not take a dependency.
 It is stdlib-only, so the whole tool fits in a zipapp: commit `asof.pyz`, run
 `python asof.pyz check`, no install step and no network.
+
+`asof agents` prints the asof half only. If the repository runs other checks of this
+kind, merge them under one heading rather than letting each tool append its own — two
+competing sets of instructions about what to run before changing something is worse
+for an agent than one set that is slightly generic:
+
+```markdown
+## Before you change things
+
+- `asof check` — which numbers in the docs are no longer true
+- `<your other check>` — …
+
+If a check blocks you, its output names the next step. Do not silence a check to
+make the build green.
+```
 
 ## The lockfile
 
@@ -256,6 +291,29 @@ shelf life it has used. Useful as a quarterly "what do we still believe" review.
 - **`run` commands are shell commands from your own repo**, executed by `asof check`.
   That is the same trust you already extend to a Makefile, but it is worth saying out
   loud before you run `asof check` inside a pull request from a stranger.
+
+## What this does not cover
+
+`asof` guards **claims about** a system — numbers in documents and configs, each
+re-established by a command or given a shelf life. It has nothing to say about
+**reasons for** a system: why a retry loop is there, why that `sleep(50)` is not a
+mistake, why the `if` that can't happen is checked anyway. Those go stale too, and
+by a different mechanism — nobody deletes a number by accident, but people delete
+strange-looking code all the time.
+
+That is a separate job, and deliberately a separate program. A claim that can expire
+and a reason that can be forgotten are not the same thing, and one tool that did both
+would explain itself worse than two that each answer "what does this do?" in a
+sentence.
+
+They do meet in one place, which is worth knowing about even though nothing is built
+for it yet: **a reason usually contains a claim.** "The vendor rate-limits at 200
+requests a minute, so the batch size is 180" is a number that will stop being true,
+sitting in the one place nobody thinks to re-check. Recording a reason and never
+questioning it again is exactly the optimism `asof` exists to refuse. If a repository
+using both ever wants that closed, the shape is for `asof` to read recorded reasons
+as another document source — but today it does not, and nothing here should be read
+as though it did.
 
 ## This repo, checked by itself
 
