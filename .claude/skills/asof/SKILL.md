@@ -22,8 +22,9 @@ when it was last true and everywhere it is written — without running anything.
 `asof check --json` returns `{tool, checked, blocked, counts, items[]}`. Each
 item leads with `id`, `status`, `where` and `why`; failing ones carry `remedy`,
 which is the same next step as the `->` line. `blocked` says whether this run
-should stop a build. `list`, `suggest` and `why` return the same envelope, so
-there is one shape to learn.
+should stop a build. `list`, `suggest`, `why`, `update` and `touch` return the
+same envelope, so there is one shape to learn — and `update --json` adds a
+`changed` flag and an `edits` list saying which bytes it moved.
 
 | Status | What happened | What to do |
 |---|---|---|

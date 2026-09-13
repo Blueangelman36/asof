@@ -61,6 +61,7 @@ What this asks of you:
   `{tool, checked, blocked, counts, items[]}`. Each item leads with `id`,
   `status`, `where` and `why`, and every failing one carries a `remedy` field
   with the next step. `blocked` tells you whether this run should stop a build.
+  `list`, `suggest`, `why`, `update` and `touch` answer in the same shape.
 
 If `asof` is not on PATH, look for a vendored `asof.pyz` at the repository root
 and run `python asof.pyz check` - it is the whole tool in one file and needs no
@@ -158,6 +159,7 @@ def _build_parser() -> argparse.ArgumentParser:
     update.add_argument("only", nargs="*", help="claim names to update (default: all)")
     update.add_argument("-n", "--dry-run", action="store_true",
                         help="show the edits without making them")
+    update.add_argument("--json", action="store_true")
 
     listing = subs.add_parser("list", help="show every claim, its value and its age")
     listing.add_argument("only", nargs="*")
@@ -165,6 +167,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     touch = subs.add_parser("touch", help="record that you have re-verified a claim by hand")
     touch.add_argument("names", nargs="+")
+    touch.add_argument("--json", action="store_true")
 
     why = subs.add_parser(
         "why", help="explain a claim: what it says, who settles it, when it was last true")
@@ -447,48 +450,85 @@ def _wrap(text: str, width: int = 72):
 # ------------------------------------------------------------------------- update
 
 
+def _planned_edits(results: list[core.Result]) -> dict[str, list[dict]]:
+    """Record what each rewrite will do, before doing it.
+
+    ``core.update`` moves a result to OK and rewrites ``document``, so the old
+    value is only readable beforehand. A report that cannot say what a number
+    used to be is not much of a report.
+    """
+    return {
+        r.name: [{"path": m.path.as_posix(), "line": m.line_no,
+                  "from": m.token, "to": r.suggestion} for m in r.markers]
+        for r in results if r.status is Status.DRIFT
+    }
+
+
 def cmd_update(root: Path, cfg, st, args) -> int:
     results = core.check(root, cfg, st, only=args.only, record=not args.dry_run)
     drifting = [r for r in results if r.status is Status.DRIFT]
+    edits = _planned_edits(results)
+    applied: set[str] = set()
+
+    if drifting and not args.dry_run:
+        applied = {r.name for r in core.update(root, drifting, st)}
+    if st.dirty and not args.dry_run:
+        st.save()
+
+    code = 1 if (args.dry_run and drifting) else 0
+    code = max(code, _leftover_code(results))
+
+    if args.json:
+        items = []
+        for r in results:
+            item = _as_dict(r)
+            item["changed"] = r.name in applied
+            item["edits"] = edits.get(r.name, [])
+            items.append(item)
+        payload = json.loads(envelope(items, blocked=code != 0, counts=_tally(results)))
+        payload["dry_run"] = bool(args.dry_run)
+        print(json.dumps(payload, indent=2))
+        return code
 
     if not drifting:
         print("Nothing to update - no number disagrees with its command.")
-        if st.dirty and not args.dry_run:
-            st.save()
-        return _report_leftovers(results)
+        _print_leftovers(results)
+        return code
 
+    for r in results:
+        for edit in edits.get(r.name, []):
+            print(f"  {edit['path']}:{edit['line']}: {edit['from']} -> {edit['to']}")
     if args.dry_run:
-        for r in drifting:
-            for m in r.markers:
-                print(f"  {m.where}: {m.token} -> {r.suggestion}")
         print(f"\n{len(drifting)} claim(s) would change. Drop --dry-run to write them.")
-        _report_leftovers([r for r in results if r.status is not Status.DRIFT])
-        return 1
-
-    changed = core.update(root, drifting, st)
-    st.save()
-    for r in changed:
-        for m in r.markers:
-            print(f"  {m.where}: {m.token} -> {r.suggestion}")
-    edits = sum(len(r.markers) for r in changed)
-    print(f"\nUpdated {len(changed)} claim(s) across {edits} place(s).")
-    return _report_leftovers(results)
+        _print_leftovers([r for r in results if r.status is not Status.DRIFT])
+    else:
+        places = sum(len(e) for e in edits.values())
+        print(f"\nUpdated {len(applied)} claim(s) across {places} place(s).")
+        _print_leftovers(results)
+    return code
 
 
-def _report_leftovers(results: list[core.Result]) -> int:
-    """Say what update could not fix, rather than exiting quietly on 'done'.
+def _leftovers(results: list[core.Result]) -> list[core.Result]:
+    """What update could not fix.
 
     Only drift has a right answer to write. A claim that reads differently in
     two files, or one whose command will not run, needs a person to decide -
     and a silent exit 0 would imply there was nothing left to decide.
     """
-    left = [r for r in results if r.status in core.FAILING]
+    return [r for r in results if r.status in core.FAILING]
+
+
+def _leftover_code(results: list[core.Result]) -> int:
+    return 1 if _leftovers(results) else 0
+
+
+def _print_leftovers(results: list[core.Result]) -> None:
+    left = _leftovers(results)
     if not left:
-        return 0
+        return
     print(f"\n{len(left)} claim(s) update cannot settle - these need a person:")
     for r in left:
         print(f"  {core.SYMBOLS[r.status]:<6} {r.name}: {r.message}")
-    return 1
     return 0
 
 
@@ -525,6 +565,28 @@ def cmd_touch(root: Path, cfg, st, args) -> int:
     missing = sorted(set(args.names) - set(done))
     if done:
         st.save()
+
+    if args.json:
+        # Re-evaluate against the lockfile we just wrote, so the report says
+        # when these claims are true *now* rather than a moment ago.
+        after = {r.name: r for r in core.check(root, cfg, st, run=False, record=False)}
+        items = []
+        for name in done:
+            item = _as_dict(after[name])
+            item["touched"] = True
+            items.append(item)
+        for name in missing:
+            items.append({
+                "id": name, "status": "unknown", "where": None, "why": "",
+                "detail": f"no claim called {name!r} is marked anywhere",
+                "remedy": "check the name against `asof list`", "touched": False,
+            })
+        counts = {k: v for k, v in
+                  (("touched", len(done)), ("unknown", len(missing))) if v}
+        print(envelope(items, blocked=bool(missing), counts=counts))
+        return 1 if missing else 0
+
+    if done:
         print("Re-verified just now: " + ", ".join(done))
     for name in missing:
         print(f"no marker found for {name!r}", file=sys.stderr)

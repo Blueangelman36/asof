@@ -320,11 +320,100 @@ class TestJsonEnvelope(Base):
         self.assertEqual(item["where"], {"path": "README.md", "line": 1})
         self.assertEqual(len(item["locations"]), 2)
 
+    def test_the_mutating_commands_wear_it_too(self):
+        for argv in (["update", "--json"], ["touch", "port", "--json"]):
+            with self.subTest(argv=argv):
+                payload = self.payload(*argv)
+                self.assertEqual(self.AGREED, self.AGREED & set(payload))
+                self.assertEqual(payload["tool"], "asof")
+
     def test_a_claim_with_no_marker_has_no_where(self):
         self.write("asof.ini", "[ghost]\nevery = 1d\n")
         (self.root / "README.md").unlink()
         (self.root / "config.toml").unlink()
         self.assertIsNone(self.payload("check", "--json")["items"][0]["where"])
+
+
+class TestMutatingJson(Base):
+    """update and touch change files, so their JSON must say exactly what changed."""
+
+    def setUp(self):
+        super().setUp()
+        self.readme = self.write("README.md", "We have 1,247 users. <!-- asof:users -->\n")
+        self.write("docs/about.md", "Serving 1,247 users. <!-- asof:users -->\n")
+        self.write("asof.ini", f'[users]\nrun = {PY} -c "print(1389)"\n'
+                               "why = Counted from the billing export.\n")
+
+    def payload(self, *argv):
+        return json.loads(self.run_cli(*argv)[1])
+
+    def test_update_reports_every_edit_it_made(self):
+        payload = self.payload("update", "--json")
+        item = payload["items"][0]
+        self.assertTrue(item["changed"])
+        self.assertEqual(len(item["edits"]), 2)
+        self.assertEqual({e["from"] for e in item["edits"]}, {"1,247"})
+        self.assertEqual({e["to"] for e in item["edits"]}, {"1,389"})
+        self.assertEqual({e["path"] for e in item["edits"]},
+                         {"README.md", "docs/about.md"})
+
+    def test_update_reports_the_new_value_and_a_settled_status(self):
+        item = self.payload("update", "--json")["items"][0]
+        self.assertEqual(item["value"], "1,389")
+        self.assertEqual(item["status"], "ok")
+        self.assertFalse(self.payload("update", "--json")["blocked"])
+
+    def test_a_dry_run_says_it_changed_nothing(self):
+        payload = self.payload("update", "--dry-run", "--json")
+        item = payload["items"][0]
+        self.assertTrue(payload["dry_run"])
+        self.assertFalse(item["changed"])
+        self.assertEqual(len(item["edits"]), 2)
+        self.assertEqual(item["status"], "drift")
+        self.assertIn("1,247", self.readme.read_text(encoding="utf-8"))
+
+    def test_dry_run_blocked_matches_its_exit_code(self):
+        code, out, _ = self.run_cli("update", "--dry-run", "--json")
+        self.assertEqual(code, 1)
+        self.assertTrue(json.loads(out)["blocked"])
+
+    def test_update_still_admits_what_it_cannot_settle(self):
+        self.write("README.md", "Port 8080. <!-- asof:port -->\n")
+        self.write("docs/about.md", "Port 9090. <!-- asof:port -->\n")
+        code, out, _ = self.run_cli("update", "--json")
+        self.assertEqual(code, 1)
+        payload = json.loads(out)
+        self.assertTrue(payload["blocked"])
+        self.assertEqual(payload["items"][0]["status"], "inconsistent")
+        self.assertIn("make these agree", payload["items"][0]["remedy"])
+
+    def test_an_untouched_claim_carries_no_edits(self):
+        self.write("asof.ini", f'[users]\nrun = {PY} -c "print(1247)"\n')
+        item = self.payload("update", "--json")["items"][0]
+        self.assertFalse(item["changed"])
+        self.assertEqual(item["edits"], [])
+
+    def test_touch_reports_what_it_re_verified(self):
+        self.write("asof.ini", "[users]\nevery = 90d\n")
+        self.run_cli("check")
+        payload = self.payload("touch", "users", "--json")
+        self.assertFalse(payload["blocked"])
+        self.assertTrue(payload["items"][0]["touched"])
+        self.assertEqual(payload["items"][0]["age_seconds"], 0)
+
+    def test_touch_reports_a_name_it_could_not_find(self):
+        code, out, _ = self.run_cli("touch", "ghost", "--json")
+        self.assertEqual(code, 1)
+        payload = json.loads(out)
+        self.assertTrue(payload["blocked"])
+        self.assertEqual(payload["items"][0]["status"], "unknown")
+        self.assertIn("asof list", payload["items"][0]["remedy"])
+
+    def test_touch_counts_both_kinds(self):
+        self.write("asof.ini", "[users]\nevery = 90d\n")
+        self.run_cli("check")
+        payload = self.payload("touch", "users", "ghost", "--json")
+        self.assertEqual(payload["counts"], {"touched": 1, "unknown": 1})
 
 
 class TestWhy(Base):

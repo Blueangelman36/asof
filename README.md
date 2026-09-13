@@ -208,8 +208,8 @@ so an agent can act on it without parsing prose.
 
 ### One JSON shape
 
-`check`, `list`, `suggest` and `why` all return the same envelope, so a caller
-learns it once:
+Every command that reports anything — `check`, `list`, `suggest`, `why`, `update`
+and `touch` — returns the same envelope, so a caller learns it once:
 
 ```json
 {
@@ -232,7 +232,12 @@ learns it once:
 ```
 
 The outer keys are deliberately generic, and each item leads with `id`,
-`status`, `where` and `why`. Anything specific to `asof` — `value`, `produced`,
+`status`, `where` and `why`. The two commands that *change* things say so in the
+same shape: `update --json` gives each item a `changed` flag and an `edits` list
+of `{path, line, from, to}`, and sets `dry_run` on the envelope, so a caller can
+see exactly which bytes moved — or would have. `touch --json` marks each item
+`touched`, and reports a name it could not find as `status: "unknown"` rather
+than only on stderr. Anything specific to `asof` — `value`, `produced`,
 `settled_by`, `every_seconds`, every `locations` entry — rides alongside those
 rather than in place of them, so a caller that only knows the common keys still
 works. `blocked` is the exit code in boolean form: true means this run should
@@ -370,8 +375,8 @@ as though it did.
 
 The README you are reading is under `asof`, which is the only honest way to ship this:
 
-- The whole tool is 4,514 lines of Python. <!-- asof:source-lines -->
-- It is covered by 232 tests. <!-- asof:test-count -->
+- The whole tool is 4,665 lines of Python. <!-- asof:source-lines -->
+- It is covered by 242 tests. <!-- asof:test-count -->
 - It has 0 third-party dependencies. <!-- asof:dependencies -->
 
 Those three numbers are checked on every push by [the workflow](.github/workflows/ci.yml).
