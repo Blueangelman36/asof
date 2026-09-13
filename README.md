@@ -206,6 +206,57 @@ documentation it gets. So every failure names its own next step:
 That line is in `asof check --json` too, as a `remedy` field on every failure,
 so an agent can act on it without parsing prose.
 
+### One JSON shape
+
+`check`, `list`, `suggest` and `why` all return the same envelope, so a caller
+learns it once:
+
+```json
+{
+  "tool": "asof",
+  "version": "0.2.0",
+  "checked": 8,
+  "blocked": true,
+  "counts": { "ok": 6, "inconsistent": 1, "stale": 1 },
+  "items": [
+    {
+      "id": "dashboard-port",
+      "status": "inconsistent",
+      "where": { "path": "README.md", "line": 64 },
+      "why": "README prose and config.toml each name this port independently.",
+      "detail": "one claim, several numbers: 8420 at README.md:64, 8500 at config.toml:6",
+      "remedy": "make these agree - edit whichever is wrong, and keep the `asof:dashboard-port` comment on each line"
+    }
+  ]
+}
+```
+
+The outer keys are deliberately generic, and each item leads with `id`,
+`status`, `where` and `why`. Anything specific to `asof` — `value`, `produced`,
+`settled_by`, `every_seconds`, every `locations` entry — rides alongside those
+rather than in place of them, so a caller that only knows the common keys still
+works. `blocked` is the exit code in boolean form: true means this run should
+stop a build.
+
+### Asking about one claim
+
+```text
+$ asof why dashboard-port
+dashboard-port   8420
+
+  README prose and config.toml each name this port independently. If they
+  disagree, the ssh tunnel line in the deployment notes is wrong.
+
+  settled   by hand, every 180d
+  owner     @platform
+  last      verified 12d ago - due in 168d
+  marked    README.md:64, config.toml:6
+```
+
+`why` is the question somebody actually has when they meet an unfamiliar marker
+in a line they were editing. It runs no commands and writes nothing — `check` is
+where verdicts come from — so it is always safe to ask.
+
 Two more things make the difference between a tool agents trip over and one
 they use:
 
@@ -319,8 +370,8 @@ as though it did.
 
 The README you are reading is under `asof`, which is the only honest way to ship this:
 
-- The whole tool is 4,265 lines of Python. <!-- asof:source-lines -->
-- It is covered by 214 tests. <!-- asof:test-count -->
+- The whole tool is 4,514 lines of Python. <!-- asof:source-lines -->
+- It is covered by 232 tests. <!-- asof:test-count -->
 - It has 0 third-party dependencies. <!-- asof:dependencies -->
 
 Those three numbers are checked on every push by [the workflow](.github/workflows/ci.yml).

@@ -87,8 +87,8 @@ class TestCheck(Base):
         self.write("README.md", "We have 12 customers. <!-- asof:customers -->")
         _, out, _ = self.run_cli("check", "--json")
         payload = json.loads(out)
-        self.assertEqual(payload[0]["name"], "customers")
-        self.assertEqual(payload[0]["document"], "12")
+        self.assertEqual(payload["items"][0]["id"], "customers")
+        self.assertEqual(payload["items"][0]["value"], "12")
 
 
 class TestUpdate(Base):
@@ -180,8 +180,10 @@ class TestOtherCommands(Base):
         self.write("README.md", "The dashboard listens on 8420 by default.")
         self.write("config.toml", "dashboard_port = 8420")
         payload = json.loads(self.run_cli("suggest", "--json")[1])
-        self.assertEqual(payload[0]["value"], "8420")
-        self.assertEqual(payload[0]["file"], "README.md")
+        self.assertEqual(payload["tool"], "asof")
+        self.assertFalse(payload["blocked"])
+        self.assertEqual(payload["items"][0]["value"], "8420")
+        self.assertEqual(payload["items"][0]["where"]["path"], "README.md")
 
     def test_suggest_says_so_when_everything_is_claimed(self):
         self.write("README.md", "The dashboard listens on 8420. <!-- asof:port -->")
@@ -218,7 +220,7 @@ class TestRemedies(Base):
         for name, text in files.items():
             self.write(name, text)
         payload = json.loads(self.run_cli("check", "--json")[1])
-        return {row["name"]: row["remedy"] for row in payload}
+        return {row["id"]: row["remedy"] for row in payload["items"]}
 
     def test_drift_names_the_update_command(self):
         remedies = self.remedy_for({
@@ -258,6 +260,134 @@ class TestRemedies(Base):
             with self.subTest(status=status):
                 result = core.Result("n", config.Claim("n"), status)
                 self.assertTrue(core.remedy(result))
+
+
+class TestJsonEnvelope(Base):
+    """One shape, so a caller learns it once and reuses it across commands."""
+
+    AGREED = {"tool", "version", "checked", "blocked", "counts", "items"}
+    ITEM_KEYS = {"id", "status", "where", "why", "detail"}
+
+    def payload(self, *argv):
+        return json.loads(self.run_cli(*argv)[1])
+
+    def setUp(self):
+        super().setUp()
+        self.write("README.md", "Port 8420. <!-- asof:port -->\n")
+        self.write("config.toml", "port = 8500  # asof:port\n")
+        self.write("asof.ini", "[port]\nwhy = Two files name this port.\nevery = 30d\n")
+
+    def test_check_wears_the_envelope(self):
+        payload = self.payload("check", "--json")
+        self.assertEqual(self.AGREED, self.AGREED & set(payload))
+        self.assertEqual(payload["tool"], "asof")
+        self.assertEqual(payload["checked"], len(payload["items"]))
+
+    def test_list_and_suggest_wear_the_same_one(self):
+        for argv in (["list", "--json"], ["suggest", "--json"], ["why", "port", "--json"]):
+            with self.subTest(argv=argv):
+                payload = self.payload(*argv)
+                self.assertEqual(self.AGREED, self.AGREED & set(payload))
+                self.assertEqual(payload["tool"], "asof")
+
+    def test_every_item_leads_with_the_agreed_keys(self):
+        for argv in (["check", "--json"], ["list", "--json"], ["suggest", "--json"]):
+            with self.subTest(argv=argv):
+                for item in self.payload(*argv)["items"]:
+                    self.assertEqual(self.ITEM_KEYS, self.ITEM_KEYS & set(item))
+
+    def test_blocked_agrees_with_the_exit_code(self):
+        code, out, _ = self.run_cli("check", "--json")
+        self.assertEqual(json.loads(out)["blocked"], code != 0)
+
+    def test_blocked_is_false_when_nothing_is_wrong(self):
+        self.write("config.toml", "port = 8420  # asof:port\n")
+        code, out, _ = self.run_cli("check", "--json")
+        self.assertEqual(code, 0)
+        self.assertFalse(json.loads(out)["blocked"])
+
+    def test_read_only_commands_never_claim_to_block(self):
+        for argv in (["list", "--json"], ["suggest", "--json"], ["why", "port", "--json"]):
+            with self.subTest(argv=argv):
+                self.assertFalse(self.payload(*argv)["blocked"])
+
+    def test_counts_add_up_to_the_items(self):
+        payload = self.payload("check", "--json")
+        self.assertEqual(sum(payload["counts"].values()), len(payload["items"]))
+
+    def test_where_points_at_the_first_marker(self):
+        item = self.payload("check", "--json")["items"][0]
+        self.assertEqual(item["where"], {"path": "README.md", "line": 1})
+        self.assertEqual(len(item["locations"]), 2)
+
+    def test_a_claim_with_no_marker_has_no_where(self):
+        self.write("asof.ini", "[ghost]\nevery = 1d\n")
+        (self.root / "README.md").unlink()
+        (self.root / "config.toml").unlink()
+        self.assertIsNone(self.payload("check", "--json")["items"][0]["where"])
+
+
+class TestWhy(Base):
+    """`asof why NAME` answers the question somebody has when they meet a marker."""
+
+    def setUp(self):
+        super().setUp()
+        self.write("README.md", "Dashboard on port 8420. <!-- asof:port -->\n")
+        self.write("config.toml", "port = 8420  # asof:port\n")
+        self.write("asof.ini", "[port]\nevery = 180d\nowner = @platform\n"
+                               "why = Both files name this port independently.\n")
+        self.run_cli("check")
+
+    def test_it_says_what_the_claim_is_and_why(self):
+        code, out, _ = self.run_cli("why", "port")
+        self.assertEqual(code, 0)
+        self.assertIn("port", out)
+        self.assertIn("8420", out)
+        self.assertIn("Both files name this port independently.", out)
+
+    def test_it_says_who_settles_it_and_when_it_is_due(self):
+        out = self.run_cli("why", "port")[1]
+        self.assertIn("by hand, every 180d", out)
+        self.assertIn("@platform", out)
+        self.assertIn("due in", out)
+
+    def test_it_names_every_place_the_claim_is_marked(self):
+        out = self.run_cli("why", "port")[1]
+        self.assertIn("README.md:1", out)
+        self.assertIn("config.toml:1", out)
+
+    def test_an_automatic_claim_shows_its_command(self):
+        self.write("asof.ini", f'[port]\nrun = {PY} -c "print(8420)"\n')
+        self.assertIn("by running:", self.run_cli("why", "port")[1])
+
+    def test_it_runs_no_commands(self):
+        sentinel = self.root / "ran.txt"
+        self.write("asof.ini",
+                   f'[port]\nrun = {PY} -c "open(r\'{sentinel}\',\'w\').write(\'x\')"\n')
+        self.run_cli("why", "port")
+        self.assertFalse(sentinel.exists(), "why explains; check verifies")
+
+    def test_it_writes_nothing(self):
+        before = (self.root / "asof.lock").read_bytes()
+        self.run_cli("why", "port")
+        self.assertEqual(before, (self.root / "asof.lock").read_bytes())
+
+    def test_an_unknown_name_is_an_error(self):
+        code, _, err = self.run_cli("why", "tyop")
+        self.assertEqual(code, 2)
+        self.assertIn("no such claim", err)
+
+    def test_several_names_at_once(self):
+        self.write("README.md", "Port 8420. <!-- asof:port -->\n"
+                                "We have 12 customers. <!-- asof:customers -->\n")
+        out = self.run_cli("why", "port", "customers")[1]
+        self.assertIn("customers", out)
+        self.assertIn("port", out)
+
+    def test_a_failing_claim_says_what_to_do(self):
+        self.write("config.toml", "port = 8500  # asof:port\n")
+        out = self.run_cli("why", "port")[1]
+        self.assertIn("make these agree", out)
 
 
 class TestSkill(Base):

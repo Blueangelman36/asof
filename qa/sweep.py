@@ -256,9 +256,9 @@ def invariant_cases():
         stable - a report whose rows reshuffle is a report nobody can diff.
         """
         def stable(text):
-            rows = json.loads(text)
-            return [(row["name"], row["status"], row["document"], row["produced"])
-                    for row in rows]
+            payload = json.loads(text)
+            return [(item["id"], item["status"], item["value"], item["produced"])
+                    for item in payload["items"]]
 
         with Repo(mixed) as r:
             r.run("check")

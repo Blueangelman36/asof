@@ -55,8 +55,12 @@ What this asks of you:
 - **Never delete an `asof:` comment to make a check pass.** That switches the
   check off rather than fixing anything; `asof check` reports it as an orphan
   and fails anyway.
-- **`asof check --json`** gives machine-readable results. Every failure carries a
-  `remedy` field with the next step.
+- **`asof why NAME`** explains a claim: what it says, who settles it, when it was
+  last true, and everywhere it is written. It runs nothing and changes nothing.
+- **`asof check --json`** gives machine-readable results as
+  `{tool, checked, blocked, counts, items[]}`. Each item leads with `id`,
+  `status`, `where` and `why`, and every failing one carries a `remedy` field
+  with the next step. `blocked` tells you whether this run should stop a build.
 
 If `asof` is not on PATH, look for a vendored `asof.pyz` at the repository root
 and run `python asof.pyz check` - it is the whole tool in one file and needs no
@@ -109,6 +113,7 @@ def main(argv: list[str] | None = None) -> int:
         "update": lambda: cmd_update(root, cfg, st, args),
         "list": lambda: cmd_list(root, cfg, st, args),
         "touch": lambda: cmd_touch(root, cfg, st, args),
+        "why": lambda: cmd_why(root, cfg, st, args),
         "suggest": lambda: cmd_suggest(root, cfg, args),
         "report": lambda: cmd_report(root, cfg, st, args),
     }
@@ -160,6 +165,11 @@ def _build_parser() -> argparse.ArgumentParser:
 
     touch = subs.add_parser("touch", help="record that you have re-verified a claim by hand")
     touch.add_argument("names", nargs="+")
+
+    why = subs.add_parser(
+        "why", help="explain a claim: what it says, who settles it, when it was last true")
+    why.add_argument("names", nargs="+")
+    why.add_argument("--json", action="store_true")
 
     subs.add_parser(
         "agents",
@@ -258,12 +268,14 @@ def cmd_check(root: Path, cfg, st, args) -> int:
     if st.dirty and not args.no_record:
         st.save()
 
+    code = core.exit_code(results, fail_on)
     if args.json:
-        print(json.dumps([_as_dict(r) for r in results], indent=2))
+        print(envelope([_as_dict(r) for r in results],
+                       blocked=code != 0, counts=_tally(results)))
     else:
         _print_table(results, quiet=args.quiet)
 
-    return core.exit_code(results, fail_on)
+    return code
 
 
 def _parse_fail_on(raw: str) -> set[Status]:
@@ -311,22 +323,125 @@ def _print_table(results: list[core.Result], quiet: bool = False) -> None:
     print(f"\n{len(results)} claim(s): " + ", ".join(parts))
 
 
+def envelope(items: list[dict], *, blocked: bool, counts: dict) -> str:
+    """Wrap results in the shape a caller can learn once.
+
+    An agent or a CI step should not have to learn a different JSON shape for
+    every tool of this kind it meets, so the outer keys are deliberately
+    generic - `tool`, `checked`, `blocked`, `counts`, `items` - and each item
+    leads with `id`, `status`, `where` and `why`. Anything specific to asof
+    rides alongside those rather than in place of them.
+    """
+    return json.dumps({
+        "tool": "asof",
+        "version": __version__,
+        "checked": len(items),
+        "blocked": blocked,
+        "counts": counts,
+        "items": items,
+    }, indent=2)
+
+
+def _tally(results: list[core.Result]) -> dict:
+    counts: dict[str, int] = {}
+    for result in results:
+        counts[result.status.value] = counts.get(result.status.value, 0) + 1
+    return dict(sorted(counts.items()))
+
+
+def _where(markers) -> dict | None:
+    return {"path": markers[0].path.as_posix(), "line": markers[0].line_no} if markers else None
+
+
 def _as_dict(r: core.Result) -> dict:
     return {
-        "name": r.name,
+        "id": r.name,
         "status": r.status.value,
-        "document": r.document,
-        "produced": r.produced,
-        "message": r.message,
+        "where": _where(r.markers),
+        "why": r.claim.why,
+        "detail": r.message,
         "remedy": core.remedy(r),
+        "value": r.document,
+        "produced": r.produced,
+        "settled_by": "command" if r.claim.automatic else "hand",
+        "command": r.claim.run or None,
+        "owner": r.claim.owner or None,
         "checked": state.to_iso(r.checked) if r.checked else None,
         "age_seconds": round(r.age) if r.age is not None else None,
         "every_seconds": round(r.claim.every) if r.claim.every else None,
-        "why": r.claim.why,
-        "owner": r.claim.owner,
-        "automatic": r.claim.automatic,
-        "markers": [{"file": m.path.as_posix(), "line": m.line_no} for m in r.markers],
+        "locations": [{"path": m.path.as_posix(), "line": m.line_no} for m in r.markers],
     }
+
+
+# ---------------------------------------------------------------------------- why
+
+
+def cmd_why(root: Path, cfg, st, args) -> int:
+    """Explain one claim: what it says, who settles it, and when it was last true.
+
+    Deliberately read-only. `check` is where verdicts come from; this answers
+    "what is this number and why is anyone watching it", which is the question
+    somebody has when they meet a marker in a file they were editing.
+    """
+    results = core.check(root, cfg, st, run=False, only=args.names, record=False)
+
+    if args.json:
+        print(envelope([_as_dict(r) for r in results],
+                       blocked=False, counts=_tally(results)))
+        return 0
+
+    for index, r in enumerate(results):
+        if index:
+            print()
+        print(f"{r.name}   {r.document or '-'}")
+        print()
+        if r.claim.why:
+            for line in _wrap(r.claim.why):
+                print(f"  {line}")
+            print()
+
+        print(f"  settled   {_settlement(r.claim)}")
+        if r.claim.owner:
+            print(f"  owner     {r.claim.owner}")
+        print(f"  last      {_last_verified(r)}")
+        print(f"  marked    {', '.join(m.where for m in r.markers) or 'nowhere'}")
+        note = core.remedy(r)
+        if note:
+            print(f"  now       {core.SYMBOLS[r.status]} - {note}")
+    return 0
+
+
+def _settlement(claim) -> str:
+    if claim.automatic:
+        every = f", re-asked every {config.format_duration(claim.every)}" if claim.every else ""
+        return f"by running: {claim.run}{every}"
+    if claim.every:
+        return f"by hand, every {config.format_duration(claim.every)}"
+    return "by hand, with no schedule set"
+
+
+def _last_verified(r: core.Result) -> str:
+    if r.age is None:
+        return "never recorded"
+    ago = f"verified {config.format_duration(r.age)} ago"
+    if not r.claim.every:
+        return ago
+    left = r.claim.every - r.age
+    if left < 0:
+        return f"{ago} - overdue by {config.format_duration(-left)}"
+    return f"{ago} - due in {config.format_duration(left)}"
+
+
+def _wrap(text: str, width: int = 72):
+    words, line = text.split(), ""
+    for word in words:
+        if line and len(line) + 1 + len(word) > width:
+            yield line
+            line = word
+        else:
+            line = f"{line} {word}".strip()
+    if line:
+        yield line
 
 
 # ------------------------------------------------------------------------- update
@@ -383,7 +498,8 @@ def _report_leftovers(results: list[core.Result]) -> int:
 def cmd_list(root: Path, cfg, st, args) -> int:
     results = core.check(root, cfg, st, run=False, only=args.only, record=False)
     if args.json:
-        print(json.dumps([_as_dict(r) for r in results], indent=2))
+        print(envelope([_as_dict(r) for r in results],
+                       blocked=False, counts=_tally(results)))
         return 0
     if not results:
         print("No claims yet.")
@@ -424,17 +540,20 @@ def cmd_suggest(root: Path, cfg, args) -> int:
     found = suggest.collect(root, cfg, claimed)
 
     if args.json:
-        print(json.dumps([{
+        print(envelope([{
+            "id": c.suggested_name,
+            "status": "unclaimed",
+            "where": {"path": c.path.as_posix(), "line": c.line_no},
+            "why": "; ".join(c.reasons),
+            "detail": c.context,
+            "remedy": f"paste `{c.marker}` after the value at "
+                      f"{c.path.as_posix()}:{c.line_no}",
             "value": c.token,
-            "file": c.path.as_posix(),
-            "line": c.line_no,
-            "score": c.score,
-            "name": c.suggested_name,
             "marker": c.marker,
+            "score": c.score,
             "echoes": c.echoes,
-            "reasons": c.reasons,
-            "context": c.context,
-        } for c in found], indent=2))
+            "also_unclaimed_at": c.sites,
+        } for c in found], blocked=False, counts={"unclaimed": len(found)}))
         return 0
 
     if not found:

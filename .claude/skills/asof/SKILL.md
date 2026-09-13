@@ -16,7 +16,14 @@ The marker binds **the last value before it on that line**.
 ## A check is failing
 
 Run `asof check` and read the `->` line under each failure; it names the next
-step. `asof check --json` carries the same text in a `remedy` field.
+step. `asof why NAME` explains any single claim — what it says, who settles it,
+when it was last true and everywhere it is written — without running anything.
+
+`asof check --json` returns `{tool, checked, blocked, counts, items[]}`. Each
+item leads with `id`, `status`, `where` and `why`; failing ones carry `remedy`,
+which is the same next step as the `->` line. `blocked` says whether this run
+should stop a build. `list`, `suggest` and `why` return the same envelope, so
+there is one shape to learn.
 
 | Status | What happened | What to do |
 |---|---|---|
