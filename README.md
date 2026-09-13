@@ -158,7 +158,7 @@ disagree, only a person knows which one is wrong.
 ## In CI
 
 ```yaml
-- run: pip install asof
+- run: pip install git+https://github.com/Blueangelman36/asof
 - run: asof check                            # what a machine can settle
 - run: asof check --no-run --fail-on stale   # what a person must settle
 ```
