@@ -8,8 +8,8 @@ again.
 
 ## What was run
 
-- **The test suite**: 242 tests. <!-- asof:test-count -->
-- **An adversarial sweep** (`qa/sweep.py`): 53 hostile-input probes <!-- asof:qa-probes -->
+- **The test suite**: 273 tests. <!-- asof:test-count -->
+- **An adversarial sweep** (`qa/sweep.py`): 56 hostile-input probes <!-- asof:qa-probes -->
   over encodings, malformed markers, broken config, damaged lockfiles, runaway
   commands and numbers that are not numbers, plus 17 invariants <!-- asof:qa-invariants -->
   asserted across them.

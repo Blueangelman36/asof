@@ -114,6 +114,107 @@ class TestUnderscoreSeparators(unittest.TestCase):
         self.assertEqual(values.render_like(1389, values.parse("1,247")), "1,389")
 
 
+class TestVersions(unittest.TestCase):
+    """A version is one value. Read as numbers, v3.10.0 claims 0."""
+
+    def last(self, text):
+        hit = values.find_last(text)
+        return hit[0] if hit else None
+
+    def same(self, a, b, kind=""):
+        return values.compare(values.parse(a), values.parse(b), values.Tolerance(""), kind)
+
+    # --- reading -----------------------------------------------------------
+
+    def test_a_v_prefixed_version_is_one_token(self):
+        self.assertEqual(self.last("Requires Python v3.10.0 or newer. "), "v3.10.0")
+
+    def test_a_three_part_version_needs_no_prefix(self):
+        self.assertEqual(self.last("Built against 3.10.0 today "), "3.10.0")
+
+    def test_a_pre_release_is_part_of_the_version(self):
+        self.assertEqual(self.last("Ships 2.4.1-rc.2 today "), "2.4.1-rc.2")
+
+    def test_pep_440_pre_releases(self):
+        self.assertEqual(self.last("Try 3.13.0rc1 now "), "3.13.0rc1")
+
+    def test_build_metadata_is_part_of_the_version(self):
+        self.assertEqual(self.last("Tagged 1.0.0+build.7 "), "1.0.0+build.7")
+
+    def test_sentence_punctuation_is_not(self):
+        self.assertEqual(self.last("Requires v3.10.0."), "v3.10.0")
+        self.assertEqual(self.last("Requires v3.10.0, at least"), "v3.10.0")
+
+    def test_a_runtime_name_glued_on_the_front(self):
+        self.assertEqual(self.last("see /usr/lib/python3.10.4 "), "3.10.4")
+
+    def test_a_v_inside_a_word_is_not_a_prefix(self):
+        self.assertEqual(self.last("the dev3.1 branch "), "3.1")
+
+    def test_an_address_is_one_token_and_the_port_still_reads(self):
+        self.assertEqual(self.last("Bind 127.0.0.1:8420 "), "8420")
+        tokens = [t for t, _, _ in values.iter_values("Bind 127.0.0.1 here")]
+        self.assertEqual(tokens, ["127.0.0.1"])
+
+    def test_a_quoted_version_is_still_a_version(self):
+        v = values.parse('"3.10.0"')
+        self.assertEqual(v.version, "3.10.0")
+        self.assertEqual(v.quote, '"')
+
+    def test_a_version_is_not_a_number(self):
+        self.assertFalse(values.parse("v3.10.0").numeric)
+
+    def test_plain_decimals_are_untouched(self):
+        self.assertEqual(values.parse("2.5").number, 2.5)
+        self.assertEqual(self.last("tolerance is 2.5 kHz here"), "2.5 kHz")
+
+    # --- comparing ---------------------------------------------------------
+
+    def test_prefix_and_quotes_do_not_matter(self):
+        self.assertTrue(self.same("v3.10.0", '"3.10.0"'))
+        self.assertTrue(self.same("V3.10.0", "3.10.0"))
+
+    def test_a_trailing_zero_component_does_not_matter(self):
+        self.assertTrue(self.same("v3.10", "3.10.0"))
+
+    def test_build_metadata_does_not_matter(self):
+        self.assertTrue(self.same("1.0.0+build.7", "v1.0.0"))
+
+    def test_a_pre_release_does(self):
+        self.assertFalse(self.same("2.4.1-rc.2", "2.4.1"))
+        self.assertFalse(self.same("2.4.1-rc.2", "2.4.1-rc.3"))
+
+    def test_components_compare_as_integers(self):
+        self.assertFalse(self.same("v3.10.0", "3.1.0"))
+        self.assertTrue(self.same("v03.010.0", "3.10.0"))
+
+    def test_two_part_decimals_are_ambiguous_without_being_told(self):
+        # 3.10 and 3.1 are the same decimal. Nothing in the text says which a
+        # reader meant, so the default stays numeric - and says so here.
+        self.assertTrue(self.same("3.10", "3.1"))
+
+    def test_type_version_settles_the_ambiguity(self):
+        self.assertFalse(self.same("3.10", "3.1", kind="version"))
+        self.assertTrue(self.same("3.10", "3.10.0", kind="version"))
+
+    def test_one_unmistakable_side_makes_both_versions(self):
+        self.assertFalse(self.same("3.1", "v3.10"))
+
+    # --- writing -----------------------------------------------------------
+
+    def test_an_update_keeps_the_prefix(self):
+        self.assertEqual(values.render_version_like(values.parse("3.11.0"),
+                                                    values.parse("v3.10.0")), "v3.11.0")
+
+    def test_an_update_keeps_the_quotes(self):
+        self.assertEqual(values.render_version_like(values.parse("3.11.0"),
+                                                    values.parse('"3.10.0"')), '"3.11.0"')
+
+    def test_an_update_does_not_add_a_prefix_that_was_not_there(self):
+        self.assertEqual(values.render_version_like(values.parse("v3.11.0"),
+                                                    values.parse("3.10.0")), "3.11.0")
+
+
 class TestRangeDashes(unittest.TestCase):
     """A dash between two numbers is a range, not a minus sign."""
 

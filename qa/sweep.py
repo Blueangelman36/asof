@@ -155,6 +155,9 @@ def probe_cases() -> list[tuple[str, dict, tuple]]:
         ("misused separators", "We have 1,24,7 users. <!-- asof:u -->"),
         ("fullwidth digits", "We have ４７ users. <!-- asof:u -->"),
         ("ip address", "Bind 127.0.0.1 there. <!-- asof:u -->"),
+        ("version", "Requires v3.10.0. <!-- asof:u -->"),
+        ("pre-release version", "Ships 2.4.1-rc.2+build.9 now. <!-- asof:u -->"),
+        ("version-shaped nonsense", "Try v1.2.3.4.5.6-a.b.c+d.e now. <!-- asof:u -->"),
     ]:
         cases.append((f"number: {label}", {"README.md": text}, ("check",)))
 

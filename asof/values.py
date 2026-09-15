@@ -44,13 +44,30 @@ NUMBER_RE = re.compile(rf"(?P<num>{_NUMBER})(?P<suffix>{_SUFFIX})")
 DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 QUOTED_RE = re.compile(r"""(?P<q>["'])(?P<body>(?:(?!(?P=q)).)*)(?P=q)""")
 
+# A version is only recognisable on its own when its shape says so: a `v` in
+# front, a third component, or a pre-release tag. Anything less - `3.10` - is
+# indistinguishable from the decimal 3.1, and guessing would be worse than
+# asking; see `type = version` in asof.ini for that case.
+#
+# Without this, `v3.10.0` reads as three numbers and a marker binds the last
+# one, 0, which is a confident wrong answer rather than a failure.
+_VERSION_TAIL = (r"(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?"        # semver pre-release
+                 r"(?:(?:a|b|rc|dev|post)\d+)?"                  # PEP 440 pre/post/dev
+                 r"(?:\+[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?")      # build metadata
+_VERSION = (rf"(?:[vV]\d+(?:\.\d+)*|\d+(?:\.\d+){{2,}}){_VERSION_TAIL}")
+VERSION_RE = re.compile(rf"(?<![0-9A-Za-z._])[vV]\d+(?:\.\d+)*{_VERSION_TAIL}(?![0-9A-Za-z_])"
+                        rf"|(?<![0-9._])\d+(?:\.\d+){{2,}}{_VERSION_TAIL}(?![0-9A-Za-z_])")
+
 # Anything that can sit in a document and be claimed, in priority order.
 _TOKEN_RE = re.compile(
     rf"""(?P<quoted>{QUOTED_RE.pattern})
        | (?P<date>{DATE_RE.pattern})
+       | (?P<version>{VERSION_RE.pattern})
        | (?P<number>{NUMBER_RE.pattern})""",
     re.VERBOSE,
 )
+
+KINDS = ("", "number", "version")
 
 
 @dataclass(frozen=True)
@@ -65,6 +82,7 @@ class Value:
     decimals: int = 0          # how many digits after the point
     space: str = ""            # whitespace between number and suffix
     quote: str = ""            # the quote character it was written inside, if any
+    version: str = ""          # "3.10.0-rc.2" when this is a version, without any `v`
 
     @property
     def numeric(self) -> bool:
@@ -106,9 +124,12 @@ def parse(text: str) -> Value:
     quoted = QUOTED_RE.fullmatch(text)
     if quoted:
         inner = parse(quoted.group("body"))
-        if not inner.numeric:
+        if not inner.numeric and not inner.version:
             return Value(raw=text, quote=quoted.group("q"))
         return replace(inner, raw=text, quote=quoted.group("q"))
+
+    if re.fullmatch(_VERSION, text):
+        return Value(raw=text, version=text.lstrip("vV"))
 
     m = re.fullmatch(rf"(?P<num>{_NUMBER})(?P<space>\s*)(?P<suffix>{_SUFFIX})", text)
     if not m:
@@ -199,6 +220,14 @@ def _group(digits: str, separator: str = ",") -> str:
     return ("-" if neg else "") + out
 
 
+def render_version_like(produced: Value, template: Value) -> str:
+    """Write a new version in the old one's style - its `v`, its quotes."""
+    text = produced.version or produced.raw.strip().strip("\"'").lstrip("vV")
+    bare = template.raw.strip().strip("\"'")
+    prefix = bare[:1] if bare[:1] in ("v", "V") else ""
+    return f"{template.quote}{prefix}{text}{template.quote}"
+
+
 def render_like(number: float, template: Value) -> str:
     """Render ``number`` (in base units) in the style of ``template``."""
     scale = MULTIPLIERS.get(template.multiplier, 1.0)
@@ -230,8 +259,41 @@ class Tolerance:
         return self.amount != 0
 
 
-def compare(document: Value, produced: Value, tolerance: Tolerance) -> bool:
-    """Is the value in the document still an honest report of ``produced``?"""
+def _version_key(value: Value) -> tuple | None:
+    """Reduce a version to what makes two of them the same release.
+
+    A leading `v` and build metadata do not change what was released, and
+    neither does a trailing `.0`: `v3.10`, `3.10.0` and `3.10.0+build.7` are one
+    version. A pre-release tag does: `2.4.1-rc.2` is not `2.4.1`.
+    """
+    text = value.version or value.raw.strip().strip("\"'").lstrip("vV")
+    release = text.partition("+")[0]
+    m = re.fullmatch(r"(\d+(?:\.\d+)*)(.*)", release)
+    if not m:
+        return None
+    parts = [int(p) for p in m.group(1).split(".")]
+    while len(parts) > 1 and parts[-1] == 0:
+        parts.pop()
+    return tuple(parts), m.group(2).lower().lstrip("-.")
+
+
+def is_version(document: Value, produced: Value, kind: str = "") -> bool:
+    return kind == "version" or bool(document.version or produced.version)
+
+
+def compare(document: Value, produced: Value, tolerance: Tolerance, kind: str = "") -> bool:
+    """Is the value in the document still an honest report of ``produced``?
+
+    Versions compare as versions, never as decimals: `3.10` and `3.1` are the
+    same number and different Pythons. That happens automatically whenever
+    either side is unmistakably a version, and on request (`type = version`)
+    for the two-part forms that could be either.
+    """
+    if is_version(document, produced, kind):
+        a, b = _version_key(document), _version_key(produced)
+        if a is not None and b is not None:
+            return a == b
+        return _loose(document.raw) == _loose(produced.raw)
     if document.numeric and produced.numeric:
         expected, actual = document.scaled, produced.scaled
         assert expected is not None and actual is not None

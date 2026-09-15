@@ -88,6 +88,10 @@ Commit `asof.lock`. It records when each claim was last known to be true.
 - **Formatting is not drift.** `1,247`, `1247`, `1.247k` and `18_000` vs
   `18,000` are the same claim; `2.5 kHz` matches `2500`; `99%` matches
   `max="99"`. Units are not interchangeable: `250ms` never matches `250s`.
+- **Versions compare as versions.** `v3.10.0` = `"3.10.0"` = `3.10`; a
+  pre-release tag must match. A two-part version like `3.10` is also the
+  decimal 3.1, so a claim tracking one needs `type = version` in `asof.ini` —
+  add it whenever the claim is a Python, Node, API or SDK version.
 - **`asof update` only fixes drift.** Anything else needs a person to decide
   which file is wrong, and it says so rather than exiting 0.
 - **`asof:off`** in a file excludes it entirely.

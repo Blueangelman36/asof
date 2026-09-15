@@ -229,7 +229,7 @@ def _check_one(root, cfg, st, name, markers, run, record, moment) -> Result:
     tolerance = values.Tolerance(claim.tolerance)
     first = markers[0].value
     for other in markers[1:]:
-        if not values.compare(first, other.value, tolerance):
+        if not values.compare(first, other.value, tolerance, claim.kind):
             spread = ", ".join(f"{m.token} at {m.where}" for m in markers)
             return Result(name, claim, Status.INCONSISTENT, markers, document=first.raw,
                           message=f"one claim, several numbers: {spread}",
@@ -243,14 +243,14 @@ def _check_one(root, cfg, st, name, markers, run, record, moment) -> Result:
             return Result(name, claim, Status.ERROR, markers, document=document,
                           message=error, checked=checked, age=age)
         produced = values.parse(output)
-        if values.compare(first, produced, tolerance):
+        if values.compare(first, produced, tolerance, claim.kind):
             if record:
                 st.record(name, document, "run", moment)
             return Result(name, claim, Status.OK, markers, document=document,
                           produced=produced.raw, checked=moment, age=0.0)
         return Result(name, claim, Status.DRIFT, markers, document=document,
                       produced=produced.raw, checked=checked, age=age,
-                      suggestion=_suggest(first, produced),
+                      suggestion=_suggest(first, produced, claim.kind),
                       message=f"document says {document}, command says {produced.raw}")
 
     if claim.automatic and not run:
@@ -295,8 +295,10 @@ def _aged(claim: config.Claim, age: float | None) -> str:
     return f"last verified {seen} ago, wanted every {every}"
 
 
-def _suggest(document: values.Value, produced: values.Value) -> str:
+def _suggest(document: values.Value, produced: values.Value, kind: str = "") -> str:
     """What the document should say, written in the style it already uses."""
+    if values.is_version(document, produced, kind):
+        return values.render_version_like(produced, document)
     if document.numeric and produced.numeric and produced.scaled is not None:
         if not document.unit or document.unit == produced.unit:
             return values.render_like(produced.scaled, document)

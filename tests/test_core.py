@@ -162,6 +162,66 @@ class TestConsistency(Base):
         self.assertIsNot(results["users"].status, Status.INCONSISTENT)
 
 
+class TestVersionClaims(Base):
+    """The paths a real version claim goes through: split, drift, update."""
+
+    def test_the_bug_as_reported(self):
+        # asof read v3.10.0 as the number 0, so any command printing a version
+        # drifted against a document that was telling the truth.
+        self.write("README.md", "Requires Python v3.10.0 or newer. <!-- asof:py -->")
+        self.write("asof.ini", f"[py]\nrun = {echo('3.10.0')}\n")
+        results, _ = self.run_check()
+        self.assertEqual(results["py"].document, "v3.10.0")
+        self.assertIs(results["py"].status, Status.OK)
+
+    def test_prose_and_config_agree_across_prefix_and_quotes(self):
+        self.write("README.md", "Requires v3.10.0. <!-- asof:py -->")
+        self.write("pyproject.toml", 'version = "3.10.0"  # asof:py')
+        results, _ = self.run_check()
+        self.assertIsNot(results["py"].status, Status.INCONSISTENT)
+
+    def test_a_new_release_is_a_drift_not_a_match(self):
+        self.write("README.md", "Current release: v2.4.1-rc.2 <!-- asof:rel -->")
+        self.write("asof.ini", f"[rel]\nrun = {echo('2.4.1')}\n")
+        results, _ = self.run_check()
+        self.assertIs(results["rel"].status, Status.DRIFT)
+        self.assertEqual(results["rel"].suggestion, "v2.4.1")
+
+    def test_update_rewrites_a_version_in_its_own_style(self):
+        readme = self.write("README.md", "Requires Python v3.10.0 or newer. <!-- asof:py -->")
+        self.write("asof.ini", f"[py]\nrun = {echo('3.11.2')}\n")
+        cfg = config.load(self.root)
+        st = state.State.load(self.root)
+        core.update(self.root, core.check(self.root, cfg, st, now=self.now), st, self.now)
+        self.assertIn("v3.11.2 or newer", readme.read_text(encoding="utf-8"))
+
+    def test_two_part_versions_need_type_version_to_split(self):
+        self.write("README.md", "Python 3.10+ is required. <!-- asof:floor -->")
+        self.write("ci.md", "CI runs Python 3.1 today. <!-- asof:floor -->")
+        results, _ = self.run_check()
+        self.assertIsNot(results["floor"].status, Status.INCONSISTENT,
+                         "without type, 3.10 and 3.1 are the same decimal")
+        self.write("asof.ini", "[floor]\ntype = version\n")
+        results, _ = self.run_check()
+        self.assertIs(results["floor"].status, Status.INCONSISTENT)
+
+    def test_type_version_drift_on_a_two_part_floor(self):
+        self.write("README.md", "Python 3.10+ is required. <!-- asof:floor -->")
+        self.write("asof.ini", f"[floor]\ntype = version\nrun = {echo('3.1')}\n")
+        results, _ = self.run_check()
+        self.assertIs(results["floor"].status, Status.DRIFT)
+        self.assertEqual(results["floor"].suggestion, "3.1")
+
+    def test_an_unknown_type_is_a_config_error(self):
+        self.write("asof.ini", "[floor]\ntype = semver-ish\n")
+        with self.assertRaises(config.ConfigError):
+            config.load(self.root)
+
+    def test_type_number_is_accepted_as_the_default(self):
+        self.write("asof.ini", "[floor]\ntype = number\n")
+        self.assertEqual(config.load(self.root).claims["floor"].kind, "")
+
+
 class TestOrphans(Base):
     def test_configured_but_unmarked(self):
         self.write("asof.ini", "[ghost]\nevery = 30d\n")

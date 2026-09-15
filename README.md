@@ -338,6 +338,17 @@ shelf life it has used. Useful as a quarterly "what do we still believe" review.
 - **Formatting is not drift.** `1,247`, `1247` and `1.247k` are the same claim, and
   so are `2.5 kHz` in prose and `2500` in a config file. Units are not: `250ms` will
   never match `250s`.
+- **A version is one value, and compares as a version.** `v3.10.0`, `"3.10.0"` and
+  `3.10` are the same release; `2.4.1-rc.2` is not `2.4.1`, and an update keeps
+  whichever `v` and quotes the document already had. asof recognises a version by
+  its shape — a `v` in front, a third component, or a pre-release tag — because a
+  bare `3.10` is also the decimal 3.1, and nothing in the text says which the
+  author meant. For a claim written that way, say so:
+
+  ```ini
+  [python-floor]
+  type = version       # so 3.10 and 3.1 are different Pythons, not one number
+  ```
 - **A quoted number is a number.** Config files quote what prose writes bare, so a
   README saying `99%` still matches `max="99"` in HTML or `version = "3.11"` in TOML.
   A quoted *word* stays a word, so `"low"` is a claim you can make about a setting.
@@ -375,8 +386,8 @@ as though it did.
 
 The README you are reading is under `asof`, which is the only honest way to ship this:
 
-- The whole tool is 4,665 lines of Python. <!-- asof:source-lines -->
-- It is covered by 242 tests. <!-- asof:test-count -->
+- The whole tool is 4,908 lines of Python. <!-- asof:source-lines -->
+- It is covered by 273 tests. <!-- asof:test-count -->
 - It has 0 third-party dependencies. <!-- asof:dependencies -->
 
 Those three numbers are checked on every push by [the workflow](.github/workflows/ci.yml).

@@ -54,6 +54,7 @@ class Claim:
     owner: str = ""
     cwd: str = ""
     timeout: float = 60.0
+    kind: str = ""          # "version" when 3.10 must not equal 3.1
 
     @property
     def automatic(self) -> bool:
@@ -122,6 +123,7 @@ def load(root: Path) -> Config:
             owner=section.get("owner", "").strip(),
             cwd=section.get("cwd", "").strip(),
             timeout=_seconds(path, name, section.get("timeout", "60").strip()),
+            kind=_kind(path, name, section.get("type", "").strip()),
         )
     return cfg
 
@@ -163,6 +165,17 @@ def _tolerance(path: Path, section: str, raw: str) -> str:
             f"{_where(path, section, 'tolerance')}: cannot read {raw!r} "
             "(use a number like 5, or a percentage like 10%)") from None
     return raw
+
+
+def _kind(path: Path, section: str, raw: str) -> str:
+    from .values import KINDS
+
+    kind = raw.lower()
+    if kind not in KINDS:
+        raise ConfigError(
+            f"{_where(path, section, 'type')}: cannot read {raw!r} "
+            "(use `version`, or leave it out for a number)")
+    return "" if kind == "number" else kind
 
 
 def _seconds(path: Path, section: str, raw: str) -> float:

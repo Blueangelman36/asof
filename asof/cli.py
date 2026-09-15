@@ -25,6 +25,8 @@ SCAFFOLD = """; asof.ini - what each number in your documents is a claim about.
 ;   tolerance  how far it may drift before anyone cares (5, 10%)
 ;   why        a sentence for whoever reads this in a year
 ;   owner      who to ask
+;   type       `version` if the value is a version written like 3.10, which
+;              would otherwise compare equal to the decimal 3.1
 
 [asof]
 ; every = 90d
