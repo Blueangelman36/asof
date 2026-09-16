@@ -185,6 +185,21 @@ class TestOtherCommands(Base):
         self.assertEqual(payload["items"][0]["value"], "8420")
         self.assertEqual(payload["items"][0]["where"]["path"], "README.md")
 
+    def test_suggest_says_what_it_read_when_it_finds_nothing(self):
+        # "Nothing found" reads as broken unless it says what it looked at.
+        self.write("README.md", "# App\n\nNo numbers here at all.\n")
+        self.write("src/app.jsx", "const LIMIT = 4200;\n")
+        code, out, _ = self.run_cli("suggest")
+        self.assertEqual(code, 0)
+        self.assertIn("1 document(s) read: README.md", out)
+        self.assertIn(".md", out)
+        self.assertIn("never suggested", out)
+
+    def test_suggest_says_so_when_there_are_no_documents(self):
+        self.write("src/app.jsx", "const LIMIT = 4200;\n")
+        out = self.run_cli("suggest")[1]
+        self.assertIn("No documents to read", out)
+
     def test_suggest_says_so_when_everything_is_claimed(self):
         self.write("README.md", "The dashboard listens on 8420. <!-- asof:port -->")
         code, out, _ = self.run_cli("suggest")

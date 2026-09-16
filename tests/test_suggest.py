@@ -1,4 +1,5 @@
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -110,7 +111,7 @@ class TestRanking(Base):
     def test_a_round_number_everywhere_is_not_treated_as_corroborated(self):
         self.write("README.md", "It resolves 50% of traffic without credits.")
         for name in ("a.css", "b.py", "c.js"):
-            self.write(name, "x = 50")
+            self.write(name, "traffic_share = 50")
         reasons = " ".join(self.collect()[0].reasons)
         self.assertIn("round number", reasons)
         self.assertNotIn("must agree", reasons)
@@ -124,7 +125,7 @@ class TestRanking(Base):
     def test_a_value_in_very_many_files_is_a_constant_not_a_claim(self):
         self.write("README.md", "The buffer holds 1024 frames at a time.")
         for i in range(8):
-            self.write(f"src/mod{i}.py", "SIZE = 1024")
+            self.write(f"src/mod{i}.py", "buffer_frames = 1024")
         reasons = " ".join(self.collect()[0].reasons)
         self.assertIn("constant, not a claim", reasons)
 
@@ -135,6 +136,70 @@ class TestRanking(Base):
     def test_nothing_worth_saying_yields_nothing(self):
         self.write("README.md", "1. one\n2. two\n3. three\n")
         self.assertEqual(self.collect(), [])
+
+
+class TestEchoesMustAgreeAboutWhat(Base):
+    """Matching a value is not matching a claim."""
+
+    def reasons(self):
+        return " ".join(self.collect()[0].reasons)
+
+    def test_a_shared_word_makes_an_echo_count(self):
+        self.write("README.md", "The dashboard listens on 8420 by default.")
+        self.write("config.toml", "dashboard_port = 8420")
+        self.assertIn("about the same thing", self.reasons())
+
+    def test_an_identifier_counts_as_the_words_it_is_made_of(self):
+        self.write("README.md", "The tolerance is 2,500 Hz in the field.")
+        self.write("aliases.py", "DEFAULT_TOLERANCE_HZ = 2500.0")
+        self.assertIn("about the same thing", self.reasons())
+
+    def test_camel_case_is_split_too(self):
+        self.write("README.md", "The retry budget is 2,500 attempts.")
+        self.write("app.js", "const retryBudget = 2500;")
+        self.assertIn("about the same thing", self.reasons())
+
+    def test_the_same_number_about_something_else_does_not_count(self):
+        # A 2,500 ms timeout is not a 2,500 Hz tolerance.
+        self.write("README.md", "The tolerance is 2,500 Hz in the field.")
+        self.write("app.js", 'setTimeout(() => banner("parked"), 2500);')
+        reasons = self.reasons()
+        self.assertIn("nothing in those lines says it is the same thing", reasons)
+        self.assertNotIn("about the same thing", reasons)
+
+    def test_an_unsupported_echo_is_still_shown(self):
+        # It is evidence a person may want to look at, just not a reason.
+        self.write("README.md", "The tolerance is 2,500 Hz in the field.")
+        self.write("app.js", 'setTimeout(() => banner("parked"), 2500);')
+        self.assertEqual(self.collect()[0].echoes, ["app.js:1"])
+
+    def test_agreeing_echoes_outrank_a_coincidence(self):
+        self.write("README.md", "The tolerance is 2,500 Hz here.\n"
+                                "The window is 4,200 ms wide.")
+        self.write("aliases.py", "TOLERANCE_HZ = 2500")
+        self.write("app.js", "const unrelated = 4200;")
+        order = [c.token for c in self.collect()]
+        self.assertEqual(order[0], "2,500 Hz")
+
+
+class TestMinifiedFiles(Base):
+    """A minified bundle is one very long line holding thousands of numbers."""
+
+    def test_a_minified_file_is_not_read_at_all(self):
+        self.write("README.md", "The limit is 4,200 requests.")
+        self.write("public/worker.min.mjs", "var a=4200,b=4200;" * 200)
+        self.write("static/app.min.css", ".x{width:4200px}")
+        reasons = " ".join(self.collect()[0].reasons)
+        self.assertNotIn("other file", reasons)
+
+    def test_one_enormous_line_does_not_take_forever(self):
+        # words() used to re-scan the whole line once per number on it, which
+        # turned a 1.2 MB single-line bundle into ~25 GB of regex work.
+        self.write("README.md", "The limit is 4,200 requests.")
+        self.write("vendor/bundle.js", ";".join(f"var v{i}={i}" for i in range(6000)))
+        started = time.monotonic()
+        self.collect()
+        self.assertLess(time.monotonic() - started, 20)
 
 
 class TestSuggestedNames(unittest.TestCase):

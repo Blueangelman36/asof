@@ -650,10 +650,23 @@ def cmd_suggest(root: Path, cfg, args) -> int:
         return 0
 
     if not found:
+        # "Nothing found" reads as broken unless it says what it looked at. On
+        # a React app whose copy lives in .jsx, the honest answer is that asof
+        # never opened the file people would expect it to.
+        docs = suggest.documents(root, cfg)
+        listed = ", ".join(docs[:4]) + (", ..." if len(docs) > 4 else "")
+        kinds = " ".join(sorted(suggest.DOCUMENTS))
         if markers:
             print(f"Nothing unclaimed worth flagging - {len(markers)} marker(s) already placed.")
+        elif docs:
+            print(f"No candidate numbers found in the {len(docs)} document(s) read: {listed}")
+            print()
+            print(f"Only prose is searched ({kinds}). Numbers in source files count "
+                  "as corroboration\nfor a claim, but are never suggested as one "
+                  "themselves - so an app whose copy\nlives in code has little here "
+                  "for asof to find.")
         else:
-            print("No candidate numbers found in your documents.")
+            print(f"No documents to read. asof looks for prose in: {kinds}")
         return 0
 
     shown = found if args.limit == 0 else found[: args.limit]

@@ -58,6 +58,26 @@ STOPWORDS = {
 }
 CLOSING_PUNCTUATION = set(").,;:!?]}>\"'/*-–—")
 
+WORD_RE = re.compile(r"[A-Za-z]+")
+STEM = 5          # "assigns" and "assigned" are the same word for this purpose
+
+
+def words(line: str) -> set[str]:
+    """The meaningful words of a line, stemmed crudely and split on case.
+
+    Identifiers carry the same words as prose: `dashboard_port` and "Dashboard
+    at ..." are talking about the same thing, and `tolerance_hz` matches
+    "tolerance (default ...)". Splitting on case and underscore is what makes
+    that visible to a count.
+    """
+    found = set()
+    for chunk in WORD_RE.findall(re.sub(r"(?<=[a-z])(?=[A-Z])", " ", line)):
+        word = chunk.lower()
+        if len(word) >= 4 and word not in STOPWORDS:
+            found.add(word[:STEM])
+    return found
+
+
 MAX_ECHO_SCORE = 10
 # Above this many files, a value is a constant of the language rather than a
 # claim. 50 and 100 and 24 are everywhere; 8420 and 2,500 are somebody's decision.
@@ -187,6 +207,13 @@ def _read(path: Path) -> str | None:
         return None
 
 
+def documents(root: Path, cfg) -> list[str]:
+    """The files suggest treats as prose, so it can say so when it finds nothing."""
+    return sorted(p.relative_to(root).as_posix()
+                  for p in scan.walk(root, cfg.include, cfg.exclude)
+                  if p.suffix.lower() in DOCUMENTS)
+
+
 def _distinctive(value: values.Value) -> bool:
     """Is this number specific enough that two files sharing it means something?
 
@@ -201,7 +228,8 @@ def _distinctive(value: values.Value) -> bool:
 def collect(root: Path, cfg, claimed_spans: set[tuple[str, int, int]]) -> list[Candidate]:
     """Find unclaimed numbers in documents, and score them by how claim-like they are."""
     candidates: list[Candidate] = []
-    seen: dict[float, list[tuple[str, str]]] = {}   # scaled value -> [(file, where)]
+    # scaled value -> [(file, where, the words of that line)]
+    seen: dict[float, list[tuple[str, str, frozenset]]] = {}
 
     for path in scan.walk(root, cfg.include, cfg.exclude):
         text = _read(path)
@@ -209,12 +237,17 @@ def collect(root: Path, cfg, claimed_spans: set[tuple[str, int, int]]) -> list[C
             continue
         rel = path.relative_to(root)
         document = rel.suffix.lower() in DOCUMENTS
+        # One line, one word list. A minified file is a single line holding
+        # thousands of numbers, and re-reading it per number is quadratic.
+        line_words: dict[int, frozenset] = {}
         for line_no, line, token, start, end in _numbers_in(text, rel, cfg.fenced):
             value = values.parse(token)
             if value.scaled is None:
                 continue
+            if line_no not in line_words:
+                line_words[line_no] = frozenset(words(line))
             seen.setdefault(value.scaled, []).append(
-                (rel.as_posix(), f"{rel.as_posix()}:{line_no}"))
+                (rel.as_posix(), f"{rel.as_posix()}:{line_no}", line_words[line_no]))
             if not document or (rel.as_posix(), line_no, start) in claimed_spans:
                 continue
             candidates.append(Candidate(token, value, rel, line_no, line, start, end))
@@ -240,20 +273,32 @@ def _group(candidates: list[Candidate]) -> list[Candidate]:
     return sorted(best.values(), key=lambda c: (-c.score, c.path.as_posix(), c.line_no))
 
 
-def _score(c: Candidate, seen: dict[float, list[tuple[str, str]]]) -> None:
+def _score(c: Candidate, seen) -> None:
     here = c.where
-    others = [w for _, w in seen.get(c.value.scaled or 0, []) if w != here]
-    files = {w.rsplit(":", 1)[0] for w in others} - {c.path.as_posix()}
-    c.echoes = sorted(dict.fromkeys(others))[:4]
+    mine = words(c.line)
+    others = [(w, shared) for _, w, shared in seen.get(c.value.scaled or 0, []) if w != here]
+
+    # Matching a value is not matching a claim. A 2,500 ms timeout and a
+    # 2,500 Hz tolerance are the same number about different things; if the two
+    # lines share no word, nothing says they are one claim.
+    agreeing = [w for w, shared in others if shared & mine]
+    files = {w.rsplit(":", 1)[0] for w in agreeing} - {c.path.as_posix()}
+    elsewhere = {w.rsplit(":", 1)[0] for w, _ in others} - {c.path.as_posix()}
+    c.echoes = sorted(dict.fromkeys(agreeing))[:4] or sorted(
+        dict.fromkeys(w for w, _ in others))[:4]
 
     if files and _distinctive(c.value) and len(files) <= COMMON_ENOUGH_TO_IGNORE:
         c.score += min(MAX_ECHO_SCORE, 5 * len(files))
-        c.reasons.append(f"written in {len(files)} other file(s) too, so two places must agree")
+        c.reasons.append(f"written in {len(files)} other file(s) too, about the same thing, "
+                         "so two places must agree")
     elif files and not _distinctive(c.value):
         c.reasons.append("appears elsewhere, but it is a round number, so that means little")
     elif files:
         c.reasons.append(f"appears in {len(files)} files, which makes it a constant, not a claim")
-    elif others:
+    elif elsewhere:
+        c.reasons.append(f"the same number is in {len(elsewhere)} other file(s), but nothing "
+                         "in those lines says it is the same thing")
+    elif [w for w, _ in others]:
         c.score += 1
         c.reasons.append("written more than once in this file")
 
