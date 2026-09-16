@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from asof import scan
+from asof import config, scan
 
 
 def names(markers):
@@ -143,6 +143,22 @@ class TestTreeAndRewrite(unittest.TestCase):
         self.write("CHANGELOG.md", "9 <!-- asof:b -->")
         self.assertEqual(len(scan.scan_tree(self.root, ["README.md"], [])), 1)
         self.assertEqual(len(scan.scan_tree(self.root, [], ["CHANGELOG.md"])), 1)
+
+    def test_generated_lockfiles_are_not_scanned(self):
+        # A lockfile is thousands of numbers and integrity hashes, none of them
+        # a claim, and mining one dominated the runtime of a small repo.
+        self.write("README.md", "We have 47 things. <!-- asof:a -->")
+        for name in ("package-lock.json", "pnpm-lock.yaml", "npm-shrinkwrap.json",
+                     "go.sum", "yarn.lock", "app/package-lock.json"):
+            self.write(name, "47 <!-- asof:junk -->")
+        found = {m.name for m in scan.scan_tree(self.root, [], config.DEFAULT_EXCLUDE)}
+        self.assertEqual(found, {"a"})
+
+    def test_an_exclude_matches_by_name_anywhere(self):
+        self.write("README.md", "8 <!-- asof:a -->")
+        self.write("deep/nested/notes.md", "9 <!-- asof:b -->")
+        found = {m.name for m in scan.scan_tree(self.root, [], ["notes.md"])}
+        self.assertEqual(found, {"a"})
 
     def test_skips_dot_git(self):
         self.write(".git/config", "8 # asof:a")

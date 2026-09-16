@@ -12,7 +12,11 @@ CONFIG_NAMES = ("asof.ini", ".asof.ini")
 DURATION_RE = re.compile(r"(?P<n>\d+(?:\.\d+)?)\s*(?P<unit>[smhdwy])", re.IGNORECASE)
 _SECONDS = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800, "y": 31557600}
 
-DEFAULT_EXCLUDE = ["asof.lock", "asof.html", "*.min.js", "*.lock", "*.svg"]
+# Generated files: thousands of numbers, not one of them a claim. `*.lock`
+# covers yarn/Cargo/poetry/composer; npm and pnpm and Go need naming.
+DEFAULT_EXCLUDE = ["asof.lock", "asof.html", "*.min.js", "*.lock", "*.svg",
+                   "package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml",
+                   "bun.lockb", "go.sum", "*.map"]
 
 
 class ConfigError(Exception):

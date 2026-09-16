@@ -319,7 +319,7 @@ def _suggest(document: values.Value, produced: values.Value, kind: str = "") -> 
         return values.render_version_like(produced, document)
     if document.numeric and produced.numeric and produced.scaled is not None:
         if not document.unit or document.unit == produced.unit:
-            return values.render_like(produced.scaled, document)
+            return values.render_faithfully(produced, document)
     return produced.raw
 
 

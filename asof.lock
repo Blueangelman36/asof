@@ -26,8 +26,8 @@
       ]
     },
     "source-lines": {
-      "value": "5,097",
-      "checked": "2026-09-16T01:54:38Z",
+      "value": "5,172",
+      "checked": "2026-09-16T01:58:19Z",
       "source": "run"
     },
     "suggest-after": {
@@ -41,8 +41,8 @@
       "source": "manual"
     },
     "test-count": {
-      "value": "287",
-      "checked": "2026-09-16T01:54:38Z",
+      "value": "295",
+      "checked": "2026-09-16T01:58:19Z",
       "source": "run"
     },
     "timeout-bug": {

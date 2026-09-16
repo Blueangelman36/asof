@@ -215,6 +215,32 @@ class TestVersions(unittest.TestCase):
                                                     values.parse("3.10.0")), "3.11.0")
 
 
+class TestFaithfulRendering(unittest.TestCase):
+    """Rendering may round a value. It may not delete digits it was given."""
+
+    def render(self, produced, template):
+        return values.render_faithfully(values.parse(produced), values.parse(template))
+
+    def test_rounding_to_the_documents_precision_still_happens(self):
+        self.assertEqual(self.render("99.42", "99.9%"), "99.4%")
+
+    def test_a_trailing_zero_is_not_rounding(self):
+        # "3.10" at the document's one decimal is "3.1": same number, different
+        # Python. Losing it is damage, not formatting.
+        self.assertEqual(self.render("3.10", "3.9"), "3.10")
+
+    def test_the_documents_style_survives(self):
+        self.assertEqual(self.render("1389", "1,247"), "1,389")
+        self.assertEqual(self.render("12400", "10.4k"), "12.4k")
+        self.assertEqual(self.render("312", "250ms"), "312ms")
+
+    def test_a_unit_is_kept_when_digits_are_preserved(self):
+        self.assertEqual(self.render("2.50 kHz", "1.5 kHz"), "2.50 kHz")
+
+    def test_extra_precision_that_changes_the_value_is_still_rounded(self):
+        self.assertEqual(self.render("3.14159", "2.7"), "3.1")
+
+
 class TestRangeDashes(unittest.TestCase):
     """A dash between two numbers is a range, not a minus sign."""
 

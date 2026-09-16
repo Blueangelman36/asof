@@ -109,7 +109,10 @@ $ asof check
 
 `asof check` exits non-zero when something has rotted, so it belongs in CI next to
 your tests. `asof update` rewrites the drifting numbers for you, in the style they
-were already written in — `1,247` becomes `1,389`, and `10.4k` becomes `12.4k`.
+were already written in — `1,247` becomes `1,389`, and `10.4k` becomes `12.4k`. It
+rounds to the precision the document used, but never past it: a document saying `3.9`
+and a command printing `3.10` is rewritten to `3.10`, because dropping that zero
+would change which Python it means.
 
 ## The two kinds of claim
 
@@ -391,8 +394,8 @@ as though it did.
 
 The README you are reading is under `asof`, which is the only honest way to ship this:
 
-- The whole tool is 5,097 lines of Python. <!-- asof:source-lines -->
-- It is covered by 287 tests. <!-- asof:test-count -->
+- The whole tool is 5,172 lines of Python. <!-- asof:source-lines -->
+- It is covered by 295 tests. <!-- asof:test-count -->
 - It has 0 third-party dependencies. <!-- asof:dependencies -->
 
 Those three numbers are checked on every push by [the workflow](.github/workflows/ci.yml).

@@ -239,6 +239,21 @@ def render_like(number: float, template: Value) -> str:
     return f"{template.quote}{body}{template.quote}"
 
 
+def render_faithfully(produced: Value, template: Value) -> str:
+    """Write the new value in the document's style, without losing its digits.
+
+    Rendering at the document's precision is usually right: a document saying
+    `99.9%` wants `99.4%`, not `99.42%`. But when the rounding changes nothing
+    about the value and only removes trailing zeros the command actually
+    printed, it is not rounding - it is damage. `3.10` rendered at one decimal
+    is `3.1`, the same number and a different Python, so the digits win.
+    """
+    text = render_like(produced.scaled or 0.0, template)
+    if produced.decimals > template.decimals and parse(text).scaled == produced.scaled:
+        text = render_like(produced.scaled or 0.0, replace(template, decimals=produced.decimals))
+    return text
+
+
 class Tolerance:
     """How far a value may drift before anyone should care."""
 

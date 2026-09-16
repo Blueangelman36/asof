@@ -213,6 +213,18 @@ class TestVersionClaims(Base):
         self.assertIs(results["floor"].status, Status.DRIFT)
         self.assertEqual(results["floor"].suggestion, "3.1")
 
+    def test_update_does_not_turn_3_10_into_3_1(self):
+        # The dangerous default: without `type = version`, 3.10 is the decimal
+        # 3.1, and rendering at the document's precision would write "3.1+".
+        readme = self.write("README.md", "Python 3.9+ is required. <!-- asof:floor -->")
+        self.write("asof.ini", f"[floor]\nrun = {echo('3.10')}\n")
+        cfg = config.load(self.root)
+        st = state.State.load(self.root)
+        results = core.check(self.root, cfg, st, now=self.now)
+        self.assertEqual(results[0].suggestion, "3.10")
+        core.update(self.root, results, st, self.now)
+        self.assertIn("Python 3.10+", readme.read_text(encoding="utf-8"))
+
     def test_an_unknown_type_is_a_config_error(self):
         self.write("asof.ini", "[floor]\ntype = semver-ish\n")
         with self.assertRaises(config.ConfigError):

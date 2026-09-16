@@ -83,7 +83,9 @@ def walk(root: Path, include: list[str], exclude: list[str]):
             rel = full.relative_to(root).as_posix()
             if include and not any(fnmatch.fnmatch(rel, p) for p in include):
                 continue
-            if any(fnmatch.fnmatch(rel, p) for p in exclude):
+            # Match the name as well as the path, so `package-lock.json`
+            # excludes the one in a sub-package too.
+            if any(fnmatch.fnmatch(rel, p) or fnmatch.fnmatch(name, p) for p in exclude):
                 continue
             try:
                 if full.stat().st_size > MAX_BYTES:
