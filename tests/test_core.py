@@ -1,4 +1,5 @@
 import re
+import string
 import sys
 import tempfile
 import unittest
@@ -273,7 +274,7 @@ class TestReport(Base):
         results = [
             core.Result(name, config.Claim(name, every=86400, why="because"), status,
                         document="47", age=43200)
-            for name, status in zip("abcdefgh", Status)
+            for name, status in zip(string.ascii_lowercase, Status)
         ]
         html = report.render(results, "demo")
         self.assertIn("<title>", html)

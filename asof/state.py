@@ -73,8 +73,18 @@ class State:
         entry = self.entry(name)
         return entry.get("value") if "value" in entry else None
 
+    def recorded_files(self, name: str) -> list[str] | None:
+        """Files that carried this claim when it was last recorded.
+
+        Files, not line numbers: a line moves every time somebody edits above
+        it, and a lockfile that churns is a lockfile people stop reading.
+        None means the claim predates this record and nothing can be concluded.
+        """
+        files = self.entry(name).get("files")
+        return list(files) if isinstance(files, list) else None
+
     def record(self, name: str, value: str, source: str, moment: datetime | None = None,
-               force: bool = False) -> None:
+               force: bool = False, files: list[str] | None = None) -> None:
         """Note that a claim was confirmed, without rewriting the file to say so twice.
 
         Staleness is measured in days, so re-stamping an unchanged claim every
@@ -86,15 +96,16 @@ class State:
         if not force:
             existing = self.entry(name)
             previous = from_iso(existing.get("checked", ""))
-            unchanged = existing.get("value") == value and existing.get("source") == source
+            unchanged = (existing.get("value") == value
+                         and existing.get("source") == source
+                         and existing.get("files", files) == files)
             if unchanged and previous and 0 <= (moment - previous).total_seconds() < GRANULARITY:
                 return
 
-        self.data["claims"][name] = {
-            "value": value,
-            "checked": to_iso(moment),
-            "source": source,
-        }
+        entry = {"value": value, "checked": to_iso(moment), "source": source}
+        if files is not None:
+            entry["files"] = list(files)
+        self.data["claims"][name] = entry
         self.dirty = True
 
     def forget(self, names) -> None:

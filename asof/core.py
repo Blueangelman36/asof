@@ -26,11 +26,13 @@ class Status(str, Enum):
     INCONSISTENT = "inconsistent"  # the same claim, two different numbers
     ERROR = "error"                # the command would not run
     ORPHAN = "orphan"              # configured, but no marker anywhere
+    DROPPED = "dropped"            # a file that carried this claim no longer does
     SKIPPED = "skipped"            # not re-run this time (--no-run)
     NEW = "new"                    # first sighting, now recorded
 
 
-FAILING = {Status.DRIFT, Status.STALE, Status.INCONSISTENT, Status.ERROR, Status.ORPHAN}
+FAILING = {Status.DRIFT, Status.STALE, Status.INCONSISTENT, Status.ERROR, Status.ORPHAN,
+           Status.DROPPED}
 
 
 class UnknownClaim(Exception):
@@ -49,6 +51,7 @@ SYMBOLS = {
     Status.INCONSISTENT: "SPLIT",
     Status.ERROR: "ERROR",
     Status.ORPHAN: "ORPHAN",
+    Status.DROPPED: "DROPPED",
     Status.SKIPPED: "--",
     Status.NEW: "new",
 }
@@ -70,6 +73,8 @@ REMEDY = {
                    "where that command cannot be executed"),
     Status.ORPHAN: ("put the `asof:{name}` comment back on the line it belongs to, or "
                     "delete [{name}] from asof.ini if that number is gone for good"),
+    Status.DROPPED: ("put the `asof:{name}` comment back where it was removed, or run "
+                     "`asof touch {name}` to accept that those files no longer state it"),
 }
 
 
@@ -226,6 +231,19 @@ def _check_one(root, cfg, st, name, markers, run, record, moment) -> Result:
         return Result(name, claim, Status.ORPHAN, [], document=was or "",
                       message=message, checked=checked, age=age)
 
+    # A claim marked in several files fails open if only some markers go: the
+    # remaining ones still agree, so nothing looks wrong, while the file that
+    # lost its marker drifts unwatched. Deleting a marker is the fastest route
+    # to a green build, so losing one has to be louder than silence.
+    here = sorted({m.path.as_posix() for m in markers})
+    was = st.recorded_files(name)
+    gone = [f for f in (was or []) if f not in here]
+    if gone:
+        return Result(name, claim, Status.DROPPED, markers, document=markers[0].value.raw,
+                      message=("the marker was removed from "
+                               f"{', '.join(gone)}; it is still marked in {', '.join(here)}"),
+                      checked=checked, age=age)
+
     tolerance = values.Tolerance(claim.tolerance)
     first = markers[0].value
     for other in markers[1:]:
@@ -245,7 +263,7 @@ def _check_one(root, cfg, st, name, markers, run, record, moment) -> Result:
         produced = values.parse(output)
         if values.compare(first, produced, tolerance, claim.kind):
             if record:
-                st.record(name, document, "run", moment)
+                st.record(name, document, "run", moment, files=here)
             return Result(name, claim, Status.OK, markers, document=document,
                           produced=produced.raw, checked=moment, age=0.0)
         return Result(name, claim, Status.DRIFT, markers, document=document,
@@ -267,7 +285,7 @@ def _check_one(root, cfg, st, name, markers, run, record, moment) -> Result:
         if not record:
             return Result(name, claim, Status.NEW, markers, document=document,
                           message="never recorded")
-        st.record(name, document, "manual", moment)
+        st.record(name, document, "manual", moment, files=here)
         return Result(name, claim, Status.NEW, markers, document=document,
                       checked=moment, age=0.0, message="first sighting, recorded")
     if recorded != document:
@@ -275,7 +293,7 @@ def _check_one(root, cfg, st, name, markers, run, record, moment) -> Result:
             return Result(name, claim, Status.OK, markers, document=document,
                           checked=checked, age=age,
                           message=f"changed by hand, {recorded} -> {document}, not yet recorded")
-        st.record(name, document, "manual", moment)
+        st.record(name, document, "manual", moment, files=here)
         return Result(name, claim, Status.OK, markers, document=document,
                       checked=moment, age=0.0,
                       message=f"changed by hand, {recorded} -> {document}")
@@ -331,7 +349,8 @@ def touch(st: state.State, results: list[Result], names: list[str],
         result = by_name.get(name)
         if result is None or not result.markers:
             continue
-        st.record(name, result.document, "manual", moment, force=True)
+        st.record(name, result.document, "manual", moment, force=True,
+                  files=sorted({m.path.as_posix() for m in result.markers}))
         done.append(name)
     return done
 

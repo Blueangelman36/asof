@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from importlib import resources
 from pathlib import Path
@@ -14,7 +15,7 @@ from .core import Status
 # Orphan is in here on purpose. A claim whose marker has been deleted is a
 # number nobody is watching any more, and a checker that stays green when its
 # markers disappear fails open - the one thing a guard must never do.
-DEFAULT_FAIL_ON = "drift,inconsistent,error,orphan"
+DEFAULT_FAIL_ON = "drift,inconsistent,error,orphan,dropped"
 
 SCAFFOLD = """; asof.ini - what each number in your documents is a claim about.
 ;
@@ -55,8 +56,9 @@ What this asks of you:
   Run `asof check`. If a README and a config file both name the same value, they
   are one claim, and changing one without the other fails the build.
 - **Never delete an `asof:` comment to make a check pass.** That switches the
-  check off rather than fixing anything; `asof check` reports it as an orphan
-  and fails anyway.
+  check off rather than fixing anything. asof remembers which files carried each
+  claim, so removing a marker from one of them is reported as `DROPPED`, names
+  the file, and fails the build anyway.
 - **`asof why NAME`** explains a claim: what it says, who settles it, when it was
   last true, and everywhere it is written. It runs nothing and changes nothing.
 - **`asof check --json`** gives machine-readable results as
@@ -91,7 +93,34 @@ Deleting the comment turns the check off, and CI will say so.
 """
 
 
+def use_utf8(streams=None) -> None:
+    """Write UTF-8 when nobody is watching the console.
+
+    On Windows a redirected stream falls back to the legacy code page, so a
+    quoted `±` lands in a CI log as mojibake and a `≥` raises UnicodeEncodeError
+    mid-report - which exits 1 and reads, to CI, as a claim being wrong. Piped
+    output is consumed by logs and agents that expect UTF-8, so give them that;
+    a real console keeps whatever encoding it can actually display, and only
+    gains `errors="replace"` so an odd character can never stop a run.
+    """
+    explicit = os.environ.get("PYTHONIOENCODING")
+    for stream in streams or (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            piped = not stream.isatty()
+            utf8 = (stream.encoding or "").lower().replace("-", "") == "utf8"
+            if piped and not utf8 and not explicit:
+                reconfigure(encoding="utf-8", errors="replace")
+            else:
+                reconfigure(errors="replace")
+        except (AttributeError, ValueError, OSError):
+            pass
+
+
 def main(argv: list[str] | None = None) -> int:
+    use_utf8()
     parser = _build_parser()
     args = parser.parse_args(argv)
     root = Path(args.root or _find_root()).resolve()

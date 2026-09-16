@@ -137,7 +137,8 @@ the doc, commit — resets the clock on its own.
 | `STALE` | nobody has stood behind this in too long |
 | `SPLIT` | the same claim, two different numbers in two files |
 | `ERROR` | the command would not run |
-| `ORPHAN` | a marker was deleted, so nobody is watching that number now |
+| `ORPHAN` | every marker for a claim is gone, so nobody is watching that number |
+| `DROPPED` | one file that used to carry a claim no longer does |
 
 `SPLIT` is the one people are surprised by, and the one that needs no command at all.
 Mark the same name in the README, in `config.toml` and in the Raspberry Pi profile,
@@ -146,10 +147,14 @@ somebody updated one of them. It compares across notation too, so a README sayin
 `±2.5 kHz` stays tied to a config saying `tolerance_hz = 2500`, and prose saying
 `99%` stays tied to an HTML slider saying `max="99"`.
 
-`ORPHAN` fails the build by default, and that is the deliberate part. Someone edits a
-sentence, the marker goes with it, and the number silently stops being checked — a
-guard that stays green when its own markers disappear is worse than no guard, because
-you think you have one.
+`ORPHAN` and `DROPPED` fail the build by default, and that is the deliberate part.
+Someone edits a sentence, the marker goes with it, and the number silently stops being
+checked — a guard that stays green when its own markers disappear is worse than no
+guard, because you think you have one. `DROPPED` is the subtler half: a claim marked in
+a README and three config files keeps passing if one file loses its marker, since the
+survivors still agree. So the lockfile records which files carried each claim, and
+losing one is reported by name. `asof touch NAME` accepts the removal when it was
+deliberate.
 
 Only `DRIFT` has a right answer to write, so `asof update` fixes those and tells you
 plainly what it left behind. Nothing else is safely automatable: when two files
@@ -386,8 +391,8 @@ as though it did.
 
 The README you are reading is under `asof`, which is the only honest way to ship this:
 
-- The whole tool is 4,908 lines of Python. <!-- asof:source-lines -->
-- It is covered by 273 tests. <!-- asof:test-count -->
+- The whole tool is 5,097 lines of Python. <!-- asof:source-lines -->
+- It is covered by 287 tests. <!-- asof:test-count -->
 - It has 0 third-party dependencies. <!-- asof:dependencies -->
 
 Those three numbers are checked on every push by [the workflow](.github/workflows/ci.yml).

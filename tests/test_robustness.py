@@ -7,6 +7,9 @@ traceback, and never a quiet exit 0.
 
 import contextlib
 import io
+import json
+import os
+import subprocess
 import sys
 import time
 import tempfile
@@ -160,6 +163,129 @@ class TestHostileFiles(Base):
         started = time.monotonic()
         core.run_command(claim, self.root)
         self.assertLess(time.monotonic() - started, 20)
+
+
+class TestDroppedMarkers(Base):
+    """Removing one marker from a claim marked in several files must not pass.
+
+    This is the shortcut an agent takes to get a green build, and the docs
+    promise it does not work. Before this, it did: the surviving markers still
+    agreed, so the file that lost its marker drifted unwatched.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.write("README.md", "Dashboard on port 8420. <!-- asof:port -->\n")
+        self.write("cfg/a.toml", "port = 8420  # asof:port\n")
+        self.write("cfg/b.toml", "port = 8420  # asof:port\n")
+        self.run_cli("check")
+
+    def test_losing_one_marker_and_changing_that_value_fails(self):
+        self.write("cfg/b.toml", "port = 9001\n")
+        code, out, _ = self.run_cli("check")
+        self.assertEqual(code, 1)
+        self.assertIn("DROPPED", out)
+        self.assertIn("cfg/b.toml", out)
+
+    def test_losing_one_marker_alone_fails_too(self):
+        self.write("cfg/b.toml", "port = 8420\n")
+        self.assertEqual(self.run_cli("check")[0], 1)
+
+    def test_it_says_where_the_claim_is_still_marked(self):
+        self.write("cfg/b.toml", "port = 9001\n")
+        out = self.run_cli("check")[1]
+        self.assertIn("still marked in README.md, cfg/a.toml", out)
+
+    def test_touch_accepts_the_removal(self):
+        self.write("cfg/b.toml", "port = 9001\n")
+        self.assertEqual(self.run_cli("touch", "port")[0], 0)
+        self.assertEqual(self.run_cli("check")[0], 0)
+
+    def test_putting_the_marker_back_fixes_it(self):
+        self.write("cfg/b.toml", "port = 9001\n")
+        self.run_cli("check")
+        self.write("cfg/b.toml", "port = 9001  # asof:port\n")
+        code, out, _ = self.run_cli("check")
+        self.assertEqual(code, 1)
+        self.assertIn("SPLIT", out)          # now the real disagreement shows
+
+    def test_gaining_a_marker_is_not_a_complaint(self):
+        self.write("cfg/c.toml", "port = 8420  # asof:port\n")
+        self.assertEqual(self.run_cli("check")[0], 0)
+
+    def test_the_lockfile_records_files_not_lines(self):
+        # Line numbers move whenever anybody edits above them; a lockfile that
+        # churns on every edit is one people stop committing.
+        lock = json.loads((self.root / "asof.lock").read_text(encoding="utf-8"))
+        self.assertEqual(lock["claims"]["port"]["files"],
+                         ["README.md", "cfg/a.toml", "cfg/b.toml"])
+        self.write("README.md", "Intro line.\nDashboard on port 8420. <!-- asof:port -->\n")
+        before = (self.root / "asof.lock").read_bytes()
+        self.run_cli("check")
+        self.assertEqual(before, (self.root / "asof.lock").read_bytes())
+
+    def test_a_claim_recorded_before_this_existed_is_not_accused(self):
+        lock = json.loads((self.root / "asof.lock").read_text(encoding="utf-8"))
+        del lock["claims"]["port"]["files"]
+        (self.root / "asof.lock").write_text(json.dumps(lock), encoding="utf-8")
+        self.write("cfg/b.toml", "port = 8420\n")
+        self.assertEqual(self.run_cli("check")[0], 0)
+
+
+class TestOutputEncoding(Base):
+    """Piped output is read by CI logs and agents, which expect UTF-8.
+
+    On Windows a redirected stream falls back to the legacy code page: `±`
+    arrives as mojibake and `≥` raises UnicodeEncodeError mid-report, exiting 1
+    - which the exit-code contract defines as "a claim is wrong".
+    """
+
+    def run_piped(self, *argv, encoding="cp1252"):
+        script = (f"import sys;sys.stdout.reconfigure(encoding={encoding!r});"
+                  f"sys.stderr.reconfigure(encoding={encoding!r});"
+                  "from asof.cli import main;raise SystemExit(main(sys.argv[1:]))")
+        env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parent.parent))
+        env.pop("PYTHONIOENCODING", None)
+        return subprocess.run([PY, "-c", script, "-C", str(self.root), *argv],
+                              capture_output=True, env=env, timeout=120)
+
+    def setUp(self):
+        super().setUp()
+        self.write("README.md", 'Tolerance is ±2,500 Hz — tuned. <!-- asof:tol -->\n')
+        self.write("other.md", 'Tolerance is ±2,600 Hz — elsewhere. <!-- asof:tol -->\n')
+        self.write("asof.ini", "[tol]\nwhy = Floor is ≥ 2,500 Hz → matches the field.\n")
+
+    def test_check_does_not_crash_on_a_character_the_code_page_lacks(self):
+        proc = self.run_piped("check")
+        self.assertNotIn(b"Traceback", proc.stderr)
+        self.assertEqual(proc.returncode, 1)          # blocking, not crashing
+
+    def test_why_does_not_crash(self):
+        proc = self.run_piped("why", "tol")
+        self.assertNotIn(b"Traceback", proc.stderr)
+        self.assertEqual(proc.returncode, 0)
+
+    def test_list_does_not_crash(self):
+        self.assertNotIn(b"Traceback", self.run_piped("list").stderr)
+
+    def test_piped_output_is_utf8(self):
+        out = self.run_piped("why", "tol").stdout
+        out.decode("utf-8")                            # raises if it is not
+        self.assertIn("≥", out.decode("utf-8"))
+
+    def test_suggest_context_survives_the_round_trip(self):
+        self.write("asof.ini", "")
+        self.write("README.md", "Tolerance defaults to ±2,500 Hz — tuned in the field.\n")
+        self.write("config.toml", "tolerance_hz = 2500\n")
+        out = self.run_piped("suggest").stdout
+        self.assertIn("±", out.decode("utf-8"))
+
+    def test_an_explicit_encoding_choice_is_respected(self):
+        env = dict(os.environ, PYTHONIOENCODING="cp1252",
+                   PYTHONPATH=str(Path(__file__).resolve().parent.parent))
+        proc = subprocess.run([PY, "-m", "asof", "-C", str(self.root), "check"],
+                              capture_output=True, env=env, timeout=120)
+        self.assertNotIn(b"Traceback", proc.stderr)    # replaced, never raised
 
 
 class TestUnknownNames(Base):

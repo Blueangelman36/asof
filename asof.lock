@@ -3,22 +3,31 @@
   "claims": {
     "dependencies": {
       "value": "0",
-      "checked": "2026-09-15T00:59:23Z",
-      "source": "run"
+      "checked": "2026-09-16T01:54:37Z",
+      "source": "run",
+      "files": [
+        "README.md"
+      ]
     },
     "qa-invariants": {
       "value": "17",
-      "checked": "2026-09-15T00:59:23Z",
-      "source": "run"
+      "checked": "2026-09-16T01:54:37Z",
+      "source": "run",
+      "files": [
+        "QA.md"
+      ]
     },
     "qa-probes": {
       "value": "56",
-      "checked": "2026-09-15T00:59:24Z",
-      "source": "run"
+      "checked": "2026-09-16T01:54:37Z",
+      "source": "run",
+      "files": [
+        "QA.md"
+      ]
     },
     "source-lines": {
-      "value": "4,908",
-      "checked": "2026-09-15T00:59:24Z",
+      "value": "5,097",
+      "checked": "2026-09-16T01:54:38Z",
       "source": "run"
     },
     "suggest-after": {
@@ -32,8 +41,8 @@
       "source": "manual"
     },
     "test-count": {
-      "value": "273",
-      "checked": "2026-09-15T00:59:24Z",
+      "value": "287",
+      "checked": "2026-09-16T01:54:38Z",
       "source": "run"
     },
     "timeout-bug": {

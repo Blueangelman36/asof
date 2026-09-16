@@ -15,7 +15,7 @@ from . import config, state
 from .core import Result, Status
 
 ORDER = [Status.ERROR, Status.INCONSISTENT, Status.DRIFT, Status.STALE,
-         Status.ORPHAN, Status.SKIPPED, Status.NEW, Status.OK]
+         Status.ORPHAN, Status.DROPPED, Status.SKIPPED, Status.NEW, Status.OK]
 
 BLURB = {
     Status.ERROR: "the command would not run",
@@ -23,6 +23,7 @@ BLURB = {
     Status.DRIFT: "the document and the command disagree",
     Status.STALE: "nobody has stood behind this in too long",
     Status.ORPHAN: "the marker is gone, so nothing is watching this",
+    Status.DROPPED: "a file that used to carry this claim no longer does",
     Status.SKIPPED: "not re-run this time",
     Status.NEW: "seen for the first time",
     Status.OK: "still true",
@@ -31,12 +32,14 @@ BLURB = {
 LABEL = {
     Status.ERROR: "error", Status.INCONSISTENT: "split", Status.DRIFT: "drift",
     Status.STALE: "stale", Status.ORPHAN: "orphan", Status.SKIPPED: "skipped",
+    Status.DROPPED: "dropped",
     Status.NEW: "new", Status.OK: "verified",
 }
 
 TONE = {
     Status.ERROR: "bad", Status.INCONSISTENT: "bad", Status.DRIFT: "bad",
-    Status.STALE: "warn", Status.ORPHAN: "warn", Status.SKIPPED: "mute",
+    Status.STALE: "warn", Status.ORPHAN: "warn", Status.DROPPED: "bad",
+    Status.SKIPPED: "mute",
     Status.NEW: "mute", Status.OK: "good",
 }
 

@@ -31,12 +31,14 @@ same envelope, so there is one shape to learn — and `update --json` adds a
 | `DRIFT` | the document and its command disagree | `asof update NAME` writes the command's answer in the document's own style. If the *document* is right and the command is wrong, fix `run` in `asof.ini` instead. |
 | `SPLIT` | one claim, different numbers in different files | Decide which is correct and edit the others. Never resolve it by deleting a marker. |
 | `STALE` | nobody has confirmed a manual claim in too long | Verify it however it is verified, then `asof touch NAME`. Correcting the number in the document also counts. |
-| `ORPHAN` | a marker was deleted, so nothing is watching that number | Put the marker back. Only delete `[NAME]` from `asof.ini` if the number is genuinely gone from the docs. |
+| `ORPHAN` | every marker for the claim is gone | Put one back. Only delete `[NAME]` from `asof.ini` if the number is genuinely gone from the docs. |
+| `DROPPED` | one file that carried the claim no longer does | Put that marker back. If the file really should stop stating it, `asof touch NAME` accepts the removal. |
 | `ERROR` | the claim's command would not run | Fix `run` under `[NAME]`. If it cannot run in this environment, `asof check --no-run` judges by age alone. |
 
 **Never delete an `asof:` comment to make a check pass.** It is the fastest way
-to a green build and the exact failure the tool exists to prevent; orphans fail
-the build anyway.
+to a green build and the exact failure the tool exists to prevent. asof records
+which files carried each claim, so taking a marker off one of several files is
+`DROPPED` and still fails.
 
 ## Before changing a constant
 
