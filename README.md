@@ -169,14 +169,42 @@ disagree, only a person knows which one is wrong.
 ## In CI
 
 ```yaml
-- run: pip install git+https://github.com/Blueangelman36/asof
+- uses: actions/checkout@v7
+- uses: Blueangelman36/asof@<tag or full commit>   # asof check: what a machine can settle
+```
+
+Pin it, as you would any action. A tool that checks your build should not change
+underneath it between two pushes.
+
+What a person must settle is a reminder, not a build failure, so it is better as a
+scheduled job that opens an issue — or comments on the one already open — than as
+something that blocks a merge:
+
+```yaml
+on:
+  schedule:
+    - cron: "0 8 * * 1"    # Monday morning
+permissions:
+  contents: read
+  issues: write
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: Blueangelman36/asof@<tag or full commit>
+        with:
+          args: check --no-run --fail-on stale
+          open-issue: true
+```
+
+Without the action it is the same two commands:
+
+```yaml
+- run: pip install git+https://github.com/Blueangelman36/asof@<tag or full commit>
 - run: asof check                            # what a machine can settle
 - run: asof check --no-run --fail-on stale   # what a person must settle
 ```
-
-Splitting it in two is deliberate. The first command is a build failure: a number in
-your docs is provably wrong. The second is a reminder, and is usually better as a
-scheduled job that opens an issue than as something that blocks a merge.
 
 For a number whose command only runs somewhere with credentials, `asof check --no-run`
 judges it by age alone and never executes anything.
