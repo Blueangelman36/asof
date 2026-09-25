@@ -26,9 +26,12 @@
       ]
     },
     "source-lines": {
-      "value": "5,310",
-      "checked": "2026-09-16T02:10:11Z",
-      "source": "run"
+      "value": "5,400",
+      "checked": "2026-09-25T01:10:46Z",
+      "source": "run",
+      "files": [
+        "README.md"
+      ]
     },
     "suggest-after": {
       "value": "18",
@@ -41,9 +44,13 @@
       "source": "manual"
     },
     "test-count": {
-      "value": "305",
-      "checked": "2026-09-16T02:10:11Z",
-      "source": "run"
+      "value": "311",
+      "checked": "2026-09-25T01:10:46Z",
+      "source": "run",
+      "files": [
+        "QA.md",
+        "README.md"
+      ]
     },
     "timeout-bug": {
       "value": "1.2s",

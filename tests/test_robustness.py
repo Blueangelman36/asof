@@ -224,6 +224,20 @@ class TestDroppedMarkers(Base):
         self.run_cli("check")
         self.assertEqual(before, (self.root / "asof.lock").read_bytes())
 
+    def test_update_keeps_watching_every_file(self):
+        # `update` used to record the new value without the files, and nothing
+        # re-added them until the value next changed - so for that whole time
+        # removing a marker went unnoticed.
+        self.write("asof.ini", f'[port]\nrun = {PY} -c "print(9001)"\n')
+        self.assertEqual(self.run_cli("update")[0], 0)
+        lock = json.loads((self.root / "asof.lock").read_text(encoding="utf-8"))
+        self.assertEqual(lock["claims"]["port"]["files"],
+                         ["README.md", "cfg/a.toml", "cfg/b.toml"])
+        self.write("cfg/b.toml", "port = 9001\n")
+        code, out, _ = self.run_cli("check")
+        self.assertEqual(code, 1)
+        self.assertIn("DROPPED", out)
+
     def test_a_claim_recorded_before_this_existed_is_not_accused(self):
         lock = json.loads((self.root / "asof.lock").read_text(encoding="utf-8"))
         del lock["claims"]["port"]["files"]
@@ -330,15 +344,81 @@ class TestLockfileChurn(Base):
         self.run_cli("check")
         self.assertNotEqual(before, (self.root / "asof.lock").read_bytes())
 
-    def test_an_old_stamp_is_refreshed(self):
+    def age_the_lock(self, days):
+        lock = json.loads((self.root / "asof.lock").read_text(encoding="utf-8"))
+        for entry in lock["claims"].values():
+            then = state.from_iso(entry["checked"]) - timedelta(days=days)
+            entry["checked"] = state.to_iso(then)
+        (self.root / "asof.lock").write_text(json.dumps(lock, indent=2) + "\n", encoding="utf-8")
+        return (self.root / "asof.lock").read_bytes()
+
+    def test_a_command_confirming_the_same_number_weeks_later_changes_nothing(self):
+        # The churn that survived the hour of slack: anyone running `asof check`
+        # the next morning rewrote every command-backed claim's timestamp.
+        self.write("README.md", MARK)
+        self.write("asof.ini", f'[users]\nrun = {PY} -c "print(1247)"\n')
+        self.run_cli("check")
+        before = self.age_the_lock(days=40)
+        self.assertEqual(self.run_cli("check")[0], 0)
+        self.assertEqual(before, (self.root / "asof.lock").read_bytes())
+
+    def test_a_claim_half_way_to_stale_is_restamped(self):
+        # Otherwise `check --no-run` would call it stale on the strength of a
+        # stamp nobody refreshed, while every run in between confirmed it.
+        self.write("README.md", MARK)
+        self.write("asof.ini", f'[users]\nrun = {PY} -c "print(1247)"\nevery = 30d\n')
+        self.run_cli("check")
+        before = self.age_the_lock(days=10)
+        self.run_cli("check")
+        self.assertEqual(before, (self.root / "asof.lock").read_bytes())
+        before = self.age_the_lock(days=10)          # now 20 days old
+        self.run_cli("check")
+        self.assertNotEqual(before, (self.root / "asof.lock").read_bytes())
+        code, out, _ = self.run_cli("check", "--no-run")
+        self.assertNotIn("STALE", out)
+
+    def test_the_stamp_moves_only_when_the_clock_is_about_to_matter(self):
         st = state.State(self.root / "asof.lock")
         moment = state.now()
-        st.record("a", "47", "run", moment)
+        st.record("a", "47", "run", moment, files=["README.md"])
         st.dirty = False
-        st.record("a", "47", "run", moment + timedelta(seconds=30))
-        self.assertFalse(st.dirty, "a fresh stamp should not be rewritten")
-        st.record("a", "47", "run", moment + timedelta(hours=3))
-        self.assertTrue(st.dirty, "a stamp hours old should be refreshed")
+        st.record("a", "47", "run", moment + timedelta(days=365), files=["README.md"])
+        self.assertFalse(st.dirty, "a claim with no shelf life never goes stale")
+        day = 86400
+        st.record("b", "47", "run", moment, every=day)
+        st.dirty = False
+        st.record("b", "47", "run", moment + timedelta(hours=11), every=day)
+        self.assertFalse(st.dirty, "under half its shelf life")
+        st.record("b", "47", "run", moment + timedelta(hours=13), every=day)
+        self.assertTrue(st.dirty, "over half its shelf life")
+
+    def test_a_short_shelf_life_still_gets_the_hour_of_slack(self):
+        st = state.State(self.root / "asof.lock")
+        moment = state.now()
+        st.record("a", "47", "run", moment, every=600)
+        st.dirty = False
+        st.record("a", "47", "run", moment + timedelta(minutes=30), every=600)
+        self.assertFalse(st.dirty)
+
+    def test_a_stamp_from_the_future_is_corrected(self):
+        st = state.State(self.root / "asof.lock")
+        moment = state.now()
+        st.record("a", "47", "run", moment + timedelta(days=3))
+        st.dirty = False
+        st.record("a", "47", "run", moment)
+        self.assertTrue(st.dirty)
+        self.assertEqual(st.checked_at("a"), moment)
+
+    def test_a_claim_recorded_before_files_were_gets_them_once(self):
+        self.write("README.md", MARK)
+        self.write("asof.ini", f'[users]\nrun = {PY} -c "print(1247)"\n')
+        self.run_cli("check")
+        lock = json.loads((self.root / "asof.lock").read_text(encoding="utf-8"))
+        del lock["claims"]["users"]["files"]
+        (self.root / "asof.lock").write_text(json.dumps(lock), encoding="utf-8")
+        self.run_cli("check")
+        lock = json.loads((self.root / "asof.lock").read_text(encoding="utf-8"))
+        self.assertEqual(lock["claims"]["users"]["files"], ["README.md"])
 
     def test_touch_always_moves_the_clock(self):
         st = state.State(self.root / "asof.lock")

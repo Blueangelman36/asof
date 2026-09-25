@@ -263,7 +263,7 @@ def _check_one(root, cfg, st, name, markers, run, record, moment) -> Result:
         produced = values.parse(output)
         if values.compare(first, produced, tolerance, claim.kind):
             if record:
-                st.record(name, document, "run", moment, files=here)
+                st.record(name, document, "run", moment, files=here, every=claim.every)
             return Result(name, claim, Status.OK, markers, document=document,
                           produced=produced.raw, checked=moment, age=0.0)
         return Result(name, claim, Status.DRIFT, markers, document=document,
@@ -333,7 +333,8 @@ def update(root: Path, results: list[Result], st: state.State,
             continue
         for marker in result.markers:
             scan.rewrite(root, marker, result.suggestion)
-        st.record(result.name, result.suggestion, "run", moment)
+        st.record(result.name, result.suggestion, "run", moment,
+                  files=sorted({m.path.as_posix() for m in result.markers}))
         result.document, result.status = result.suggestion, Status.OK
         changed.append(result)
     return changed

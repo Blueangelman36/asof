@@ -13,9 +13,8 @@ from pathlib import Path
 LOCK_NAME = "asof.lock"
 VERSION = 1
 
-# How stale a confirmation may be before re-stamping it is worth a file write.
-# Staleness thresholds are days or months; an hour of slack is invisible to
-# them and removes the churn entirely.
+# The least slack an unchanged confirmation gets before it is re-stamped.
+# Staleness thresholds are days or months; an hour is invisible to them.
 GRANULARITY = 3600
 
 
@@ -84,23 +83,33 @@ class State:
         return list(files) if isinstance(files, list) else None
 
     def record(self, name: str, value: str, source: str, moment: datetime | None = None,
-               force: bool = False, files: list[str] | None = None) -> None:
+               force: bool = False, files: list[str] | None = None,
+               every: float | None = None) -> None:
         """Note that a claim was confirmed, without rewriting the file to say so twice.
 
-        Staleness is measured in days, so re-stamping an unchanged claim every
-        time anyone runs `asof check` buys nothing and costs a permanently
-        dirty working tree - the lockfile is meant to be committed, and a file
-        that changes on every read is a file people stop reading.
+        The lockfile is meant to be committed, and a file that changes on every
+        read is a file people stop reading. So a confirmation that changes
+        nothing - same value, same source, same files - moves the clock only
+        when the clock is about to matter: once the stamp is half way through
+        the claim's shelf life (`every`). A claim with no shelf life can never
+        go stale, so its stamp stays where the value was last established.
+
+        `files` of None keeps whatever files were recorded before.
         """
         moment = moment or now()
+        existing = self.entry(name)
+        if files is None and isinstance(existing.get("files"), list):
+            files = existing["files"]
         if not force:
-            existing = self.entry(name)
             previous = from_iso(existing.get("checked", ""))
             unchanged = (existing.get("value") == value
                          and existing.get("source") == source
-                         and existing.get("files", files) == files)
-            if unchanged and previous and 0 <= (moment - previous).total_seconds() < GRANULARITY:
-                return
+                         and existing.get("files") == (list(files) if files is not None else None))
+            if unchanged and previous:
+                age = (moment - previous).total_seconds()
+                # A stamp from the future is a clock problem, and rewriting it is the fix.
+                if 0 <= age and (every is None or age < max(GRANULARITY, every / 2)):
+                    return
 
         entry = {"value": value, "checked": to_iso(moment), "source": source}
         if files is not None:
