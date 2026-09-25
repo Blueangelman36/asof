@@ -169,14 +169,42 @@ disagree, only a person knows which one is wrong.
 ## In CI
 
 ```yaml
-- run: pip install git+https://github.com/Blueangelman36/asof
+- uses: actions/checkout@v7
+- uses: Blueangelman36/asof@<tag or full commit>   # asof check: what a machine can settle
+```
+
+Pin it, as you would any action. A tool that checks your build should not change
+underneath it between two pushes.
+
+What a person must settle is a reminder, not a build failure, so it is better as a
+scheduled job that opens an issue — or comments on the one already open — than as
+something that blocks a merge:
+
+```yaml
+on:
+  schedule:
+    - cron: "0 8 * * 1"    # Monday morning
+permissions:
+  contents: read
+  issues: write
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: Blueangelman36/asof@<tag or full commit>
+        with:
+          args: check --no-run --fail-on stale
+          open-issue: true
+```
+
+Without the action it is the same two commands:
+
+```yaml
+- run: pip install git+https://github.com/Blueangelman36/asof@<tag or full commit>
 - run: asof check                            # what a machine can settle
 - run: asof check --no-run --fail-on stale   # what a person must settle
 ```
-
-Splitting it in two is deliberate. The first command is a build failure: a number in
-your docs is provably wrong. The second is a reminder, and is usually better as a
-scheduled job that opens an issue than as something that blocks a merge.
 
 For a number whose command only runs somewhere with credentials, `asof check --no-run`
 judges it by age alone and never executes anything.
@@ -317,9 +345,16 @@ make the build green.
 
 ## The lockfile
 
-`asof.lock` records, for every claim, the value and the moment it was last known to be
-true. Commit it. A number changing is one diff; the moment somebody stood behind it is
-another, and you want both in the history.
+`asof.lock` records, for every claim, the value, the files it is marked in, and the
+moment it was last known to be true. Commit it. A number changing is one diff; the moment
+somebody stood behind it is another, and you want both in the history.
+
+What you do not want is a diff every time somebody runs `asof check`. So a check that
+confirms what the lockfile already says leaves it alone. The timestamp moves when the
+value or its files change, when you `asof touch` a claim, and when a claim with an
+`every` is half way through its shelf life — early, so a claim that regular checks keep
+confirming is never reported stale by `asof check --no-run`. A claim with no `every`
+cannot go stale, so its timestamp stays where its value was last set.
 
 ## The report
 
@@ -397,8 +432,8 @@ as though it did.
 
 The README you are reading is under `asof`, which is the only honest way to ship this:
 
-- The whole tool is 5,310 lines of Python. <!-- asof:source-lines -->
-- It is covered by 305 tests. <!-- asof:test-count -->
+- The whole tool is 5,400 lines of Python. <!-- asof:source-lines -->
+- It is covered by 311 tests. <!-- asof:test-count -->
 - It has 0 third-party dependencies. <!-- asof:dependencies -->
 
 Those three numbers are checked on every push by [the workflow](.github/workflows/ci.yml).
