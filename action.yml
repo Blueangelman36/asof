@@ -1,0 +1,93 @@
+name: asof check
+description: >-
+  Check the numbers in your docs against the commands that produce them, and
+  say when a number only a person can settle has gone unchecked too long.
+author: Blueangelman36
+branding:
+  icon: clock
+  color: gray-dark
+
+# Pin it like any action, to a tag or a full commit:
+#
+#   - uses: actions/checkout@v7
+#   - uses: Blueangelman36/asof@<tag or commit>
+#
+# Stale manual claims are a reminder rather than a build failure, so they are
+# best as a scheduled job that opens an issue (see README "In CI"):
+#
+#   - uses: Blueangelman36/asof@<tag or commit>
+#     with:
+#       args: check --no-run --fail-on stale
+#       open-issue: true
+#
+# which needs `permissions: issues: write` on the job.
+
+inputs:
+  args:
+    description: Arguments passed to asof.
+    required: false
+    default: check
+  open-issue:
+    description: >-
+      When asof exits non-zero, open an issue with its report, or comment on
+      the one already open. For scheduled jobs.
+    required: false
+    default: "false"
+  token:
+    description: Token used to open the issue.
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  exit-code:
+    description: asof's exit code (0 nothing to say, 1 something is blocking, 2 could not do its job).
+    value: ${{ steps.run.outputs.code }}
+
+runs:
+  using: composite
+  steps:
+    - name: Run asof
+      id: run
+      shell: bash
+      env:
+        PYTHONPATH: ${{ github.action_path }}
+        PYTHONIOENCODING: utf-8
+        ASOF_ARGS: ${{ inputs.args }}
+      run: |
+        py=python3; command -v python3 >/dev/null 2>&1 || py=python
+        set +e
+        # Word splitting on ASOF_ARGS is intended: it is a command line.
+        "$py" -m asof $ASOF_ARGS 2>&1 | tee "$RUNNER_TEMP/asof-report.txt"
+        code=${PIPESTATUS[0]}
+        echo "code=$code" >> "$GITHUB_OUTPUT"
+
+    - name: Open or update an issue
+      if: inputs.open-issue == 'true' && steps.run.outputs.code != '0'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        ASOF_ARGS: ${{ inputs.args }}
+      run: |
+        title="asof: documentation claims need attention"
+        {
+          echo "\`asof $ASOF_ARGS\` exited ${{ steps.run.outputs.code }} on $(date -u +%Y-%m-%d)."
+          echo
+          echo '```'
+          cat "$RUNNER_TEMP/asof-report.txt"
+          echo '```'
+          echo
+          echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+        } > "$RUNNER_TEMP/asof-issue.md"
+        # One open issue at a time: a weekly job that opened a new one each run
+        # would train everyone to close them unread.
+        existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+          --search "\"$title\" in:title" --json number --jq '.[0].number // empty')
+        if [ -n "$existing" ]; then
+          gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/asof-issue.md"
+        else
+          gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body-file "$RUNNER_TEMP/asof-issue.md"
+        fi
+
+    - name: Pass asof's verdict on
+      shell: bash
+      run: exit ${{ steps.run.outputs.code }}

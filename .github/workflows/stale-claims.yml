@@ -1,0 +1,25 @@
+name: Stale claims
+
+# Monday morning: nothing has changed, but time has passed, and time is the only
+# thing that makes a manual claim go stale. A reminder rather than a build
+# failure, so it opens an issue (or comments on the open one) instead of
+# blocking anybody's merge.
+
+on:
+  schedule:
+    - cron: "0 8 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./
+        with:
+          args: check --no-run --fail-on stale
+          open-issue: true

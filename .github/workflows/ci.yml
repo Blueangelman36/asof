@@ -3,10 +3,6 @@ name: ci
 on:
   push:
   pull_request:
-  schedule:
-    # Monday morning: nothing has changed, but time has passed, and time is
-    # the only thing that makes a manual claim go stale.
-    - cron: "0 8 * * 1"
 
 jobs:
   test:
@@ -17,8 +13,8 @@ jobs:
         os: [ubuntu-latest, windows-latest]
         python: ["3.10", "3.13"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python }}
       - run: python -m unittest discover -s tests -t . -v
@@ -32,8 +28,8 @@ jobs:
     # The README's own numbers, checked by the tool the README describes.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
       - name: Numbers a machine can settle
@@ -47,8 +43,8 @@ jobs:
     # it is built and exercised on every push rather than at release time.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.10"
       - run: python tools/build_pyz.py
@@ -62,7 +58,15 @@ jobs:
             exit 1
           fi
           echo "caught the split from a bare interpreter, as it should"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: asof-pyz
           path: dist/asof.pyz
+
+  action:
+    # The action other repositories pin, run against this repository's own
+    # claims, as they would run it.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./

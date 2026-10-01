@@ -8,7 +8,7 @@ again.
 
 ## What was run
 
-- **The test suite**: 305 tests. <!-- asof:test-count -->
+- **The test suite**: 311 tests. <!-- asof:test-count -->
 - **An adversarial sweep** (`qa/sweep.py`): 56 hostile-input probes <!-- asof:qa-probes -->
   over encodings, malformed markers, broken config, damaged lockfiles, runaway
   commands and numbers that are not numbers, plus 17 invariants <!-- asof:qa-invariants -->
@@ -62,7 +62,11 @@ printed "no claims yet" and exited 0, so a typo in a CI invocation would pass
 forever. And the lockfile churned: every run rewrote every timestamp, which
 left the working tree permanently dirty and put a meaningless diff in every
 commit. Confirmations are now recorded at hour granularity, which is invisible
-to staleness thresholds measured in days and removes the churn entirely.
+to staleness thresholds measured in days. That turned out to remove the churn
+only within the hour: a check the next morning still rewrote every
+command-backed timestamp. Now a confirmation that changes nothing is
+re-stamped only once the claim is half way to going stale, and never for a
+claim with no shelf life.
 
 **A range dash read as a minus sign.** "restricted to 50-99%" parsed as `50`
 and `-99%`. Found by a test I wrote for something else, which is the usual way.
