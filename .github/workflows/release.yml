@@ -5,7 +5,8 @@ name: Release
 #   - a GitHub release with asof.pyz attached: the one-file build, runnable with
 #     no install. Needs no setup.
 #   - the package on PyPI, through trusted publishing. Needs the one-time setup
-#     in docs/RELEASING.md; until then that job fails and nothing else does.
+#     in docs/RELEASING.md, ending with the repository variable PUBLISH_TO_PYPI
+#     set to `true`; until then that job is skipped and nothing else notices.
 #
 # Nothing here runs on a normal push.
 
@@ -80,6 +81,7 @@ jobs:
   publish:
     name: publish to PyPI
     needs: build
+    if: vars.PUBLISH_TO_PYPI == 'true'
     runs-on: ubuntu-latest
     environment: pypi
     permissions:

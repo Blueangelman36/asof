@@ -26,6 +26,10 @@ as `chesterton` and installs `fence`. If you would rather another name, change `
 3. In this repository: **Settings → Environments → New environment → `pypi`**. Adding
    yourself as a required reviewer there means a release waits for your approval even
    after the tag is pushed.
+4. Still in the repository: **Settings → Secrets and variables → Actions → Variables →
+   New repository variable**, named `PUBLISH_TO_PYPI`, value `true`. Without it the PyPI
+   job is skipped, so a tag before this setup still produces a green release with
+   `asof.pyz` attached.
 
 No API token is created or stored; the workflow authenticates with a short-lived OIDC
 token only it can obtain.
@@ -37,21 +41,22 @@ token only it can obtain.
 $EDITOR pyproject.toml asof/__init__.py
 
 # 2. Commit, then tag the commit on main.
-git tag -a v0.3.2 -m "asof 0.3.2"
-git push origin v0.3.2
+git tag -a v0.4.0 -m "asof 0.4.0"
+git push origin v0.4.0
 ```
 
 Then watch the run in the **Actions** tab. The GitHub release appears when the build
-passes; the PyPI job waits on the `pypi` environment.
+passes; the PyPI job waits on the `pypi` environment, or is skipped if
+`PUBLISH_TO_PYPI` is not set.
 
 ## Afterwards
 
 Other repositories should pin what they use, whichever way they use it:
 
 ```yaml
-- uses: Blueangelman36/asof@v0.3.2          # the action
-- run: pip install asof-claims==0.3.2        # from PyPI
-- run: pip install git+https://github.com/Blueangelman36/asof@v0.3.2
+- uses: Blueangelman36/asof@v0.4.0          # the action
+- run: pip install asof-claims==0.4.0        # from PyPI
+- run: pip install git+https://github.com/Blueangelman36/asof@v0.4.0
 ```
 
 A version on PyPI can be yanked but never deleted or reused, so a broken release gets a
