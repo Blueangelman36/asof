@@ -1,0 +1,29 @@
+{
+  "id": "24db75d2",
+  "reason": "The command runs under shell=True, so the work is the shell's grandchild. Killing only the shell orphaned it and it held the pipes open: a 1s timeout against a 30s sleep returned after 30s while reporting a 1s timeout, and a claim command could hang CI indefinitely. Its own session is what lets _kill_tree kill the whole group (QA pass, 2026-09-11; asof.ini timeout-bug).",
+  "source": null,
+  "author": "Claude",
+  "created": "2026-10-26",
+  "snippet": "kwargs[\"start_new_session\"] = True   # gives the shell its own group to kill",
+  "anchors": {
+    "3": {
+      "version": 3,
+      "path": "asof/core.py",
+      "scope": "run_command",
+      "kind": "Assign",
+      "line": 141,
+      "exact": "55f8a7c723bce29b",
+      "shape": "465f356f118aeb77",
+      "dupes": {
+        "exact": 1,
+        "shape": 1,
+        "other_exact": 0,
+        "other_shape": 0,
+        "far_exact": 0,
+        "far_shape": 0
+      },
+      "rival": 0.375,
+      "tokens": ["kwargs", "[", "\"start_new_session\"", "]", "=", "True"]
+    }
+  }
+}

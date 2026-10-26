@@ -1,0 +1,29 @@
+{
+  "id": "783d9749",
+  "reason": "DROPPED exists because a claim marked in several files fails open when only some markers go: the remaining ones still agree with each other, so nothing looks wrong while the file that lost its marker drifts unwatched. Don't fold this into OK or ORPHAN.",
+  "source": null,
+  "author": "Claude",
+  "created": "2026-10-26",
+  "snippet": "return Result(name, claim, Status.DROPPED, markers, document=markers[0].value.raw,\n              message=(\"the marker was removed from \"\n                       f\"{', '.join(gone)}; it is still marked in {', '.join(here)}\"),\n              checked=checked, age=age)",
+  "anchors": {
+    "3": {
+      "version": 3,
+      "path": "asof/core.py",
+      "scope": "_check_one",
+      "kind": "Return",
+      "line": 242,
+      "exact": "e1809669632f09a8",
+      "shape": "930f10f9aab18b55",
+      "dupes": {
+        "exact": 1,
+        "shape": 1,
+        "other_exact": 0,
+        "other_shape": 0,
+        "far_exact": 0,
+        "far_shape": 0
+      },
+      "rival": 0.46875,
+      "tokens": ["return", "Result", "(", "name", ",", "claim", ",", "Status", ".", "DROPPED", ",", "markers", ",", "document", "=", "markers", "[", "0", "]", ".", "value", ".", "raw", ",", "message", "=", "(", "\"the marker was removed from \"", "f\"", "{", "', '", ".", "join", "(", "gone", ")", "}", "; it is still marked in ", "{", "', '", ".", "join", "(", "here", ")", "}", "\"", ")", ",", "checked", "=", "checked", ",", "age", "=", "age", ")"]
+    }
+  }
+}

@@ -70,6 +70,25 @@ jobs:
           # The skill ships inside the package; a wheel without it fails here.
           "$asof" skill && test -s .claude/skills/asof/SKILL.md
 
+  fences:
+    # Why the load-bearing code is the way it is, recorded with fence (chesterton,
+    # the sibling tool) in .fence/notes/. A change that removes one of those
+    # statements fails here and names the reason, which is quoted on the PR too.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write  # the reasons comment
+    steps:
+      - uses: actions/checkout@v7
+      # Pinned by commit, like every tool that checks this build. The notes were
+      # written by the Python build, so that is the one asked; --strict fails on a
+      # note it could not compare rather than passing it.
+      - uses: Blueangelman36/chesterton@a5842f13016ae1fc0790442872fa3bd97f4196df # v0.1.0
+        with:
+          implementation: python
+          args: check --strict
+          comment-on-pr: true
+
   single-file:
     # The zipapp is how asof reaches a repo that will not pip install it, so
     # it is built and exercised on every push rather than at release time.

@@ -1,0 +1,29 @@
+{
+  "id": "314dc566",
+  "reason": "orphan and dropped fail the build by default, and that is the point. Deleting a marker is the shortest path to a green build; if losing markers only warned, asof would fail open exactly when someone was routing around it. 'Fail the build when a marker is deleted' (2026-09-11).",
+  "source": null,
+  "author": "Claude",
+  "created": "2026-10-26",
+  "snippet": "DEFAULT_FAIL_ON = \"drift,inconsistent,error,orphan,dropped\"",
+  "anchors": {
+    "3": {
+      "version": 3,
+      "path": "asof/cli.py",
+      "scope": "",
+      "kind": "Assign",
+      "line": 18,
+      "exact": "240b96311ea626fd",
+      "shape": "c4b9858fcd2d5d12",
+      "dupes": {
+        "exact": 1,
+        "shape": 1,
+        "other_exact": 0,
+        "other_shape": 0,
+        "far_exact": 0,
+        "far_shape": 0
+      },
+      "rival": 0.1111111111111111,
+      "tokens": ["DEFAULT_FAIL_ON", "=", "<046ad4bb>"]
+    }
+  }
+}

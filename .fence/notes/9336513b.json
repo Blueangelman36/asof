@@ -1,0 +1,29 @@
+{
+  "id": "9336513b",
+  "reason": "Each place is rendered in its own style, not the first place's. Writing one spelling everywhere turned 'limit = 1000' in config.toml into 'limit = 2,000' because the README wrote 1,000 - not TOML (reproduced on 0.4.0, 2026-10-26). test_update_writes_each_place_in_its_own_style.",
+  "source": null,
+  "author": "Claude",
+  "created": "2026-10-26",
+  "snippet": "return _suggest(marker.value, values.parse(result.produced), result.claim.kind)",
+  "anchors": {
+    "3": {
+      "version": 3,
+      "path": "asof/core.py",
+      "scope": "rewrite_for",
+      "kind": "Return",
+      "line": 336,
+      "exact": "ac3208203f0cf84b",
+      "shape": "e9a1e09cc74349b7",
+      "dupes": {
+        "exact": 1,
+        "shape": 1,
+        "other_exact": 0,
+        "other_shape": 0,
+        "far_exact": 0,
+        "far_shape": 0
+      },
+      "rival": 0.18604651162790697,
+      "tokens": ["return", "_suggest", "(", "marker", ".", "value", ",", "values", ".", "parse", "(", "result", ".", "produced", ")", ",", "result", ".", "claim", ".", "kind", ")"]
+    }
+  }
+}
