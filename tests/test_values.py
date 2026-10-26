@@ -200,6 +200,28 @@ class TestVersions(unittest.TestCase):
     def test_one_unmistakable_side_makes_both_versions(self):
         self.assertFalse(self.same("3.1", "v3.10"))
 
+    # --- requirements ------------------------------------------------------
+    # Found adopting asof on chesterton: `requires-python = ">=3.11"` read as an
+    # opaque string, so it split against the README's "Python 3.11+".
+
+    def test_a_requirement_states_its_lowest_version(self):
+        v = values.parse('">=3.11"')
+        self.assertEqual((v.version, v.operator, v.quote), ("3.11", ">=", '"'))
+        self.assertTrue(self.same('">=3.11"', "3.11"))
+        self.assertTrue(self.same("~=3.11", "3.11.0"))
+        self.assertTrue(self.same("^18.2", "18.2"))
+        self.assertTrue(self.same(">= 3.11", "3.11"))
+
+    def test_the_operator_makes_a_two_part_version_a_version(self):
+        self.assertFalse(self.same('">=3.10"', "3.1"))
+
+    def test_a_requirement_for_another_version_still_disagrees(self):
+        self.assertFalse(self.same('">=3.12"', "3.11"))
+
+    def test_operators_that_do_not_name_the_version_stay_opaque(self):
+        for text in (">3.11", "<4", "!=3.11", "~5", ">=3.11,<4"):
+            self.assertEqual(values.parse(text).version, "", text)
+
     # --- writing -----------------------------------------------------------
 
     def test_an_update_keeps_the_prefix(self):
@@ -213,6 +235,12 @@ class TestVersions(unittest.TestCase):
     def test_an_update_does_not_add_a_prefix_that_was_not_there(self):
         self.assertEqual(values.render_version_like(values.parse("v3.11.0"),
                                                     values.parse("3.10.0")), "3.11.0")
+
+    def test_an_update_keeps_the_operator(self):
+        self.assertEqual(values.render_version_like(values.parse("3.12"),
+                                                    values.parse('">=3.11"')), '">=3.12"')
+        self.assertEqual(values.render_version_like(values.parse("19.0"),
+                                                    values.parse('"^v18.2"')), '"^v19.0"')
 
 
 class TestFaithfulRendering(unittest.TestCase):

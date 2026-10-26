@@ -58,6 +58,16 @@ _VERSION = (rf"(?:[vV]\d+(?:\.\d+)*|\d+(?:\.\d+){{2,}}){_VERSION_TAIL}")
 VERSION_RE = re.compile(rf"(?<![0-9A-Za-z._])[vV]\d+(?:\.\d+)*{_VERSION_TAIL}(?![0-9A-Za-z_])"
                         rf"|(?<![0-9._])\d+(?:\.\d+){{2,}}{_VERSION_TAIL}(?![0-9A-Za-z_])")
 
+# A requirement that names its lowest version is a statement of that version:
+# `requires-python = ">=3.11"` says what a README's "Python 3.11+" says, and it is
+# where most projects actually declare it. The operator is what makes a two-part
+# `3.11` unmistakably a version here. Only operators whose version is the one
+# meant: `>3.11` and `<4` name a version the project does not mean, and a range
+# like `>=3.11,<4` stays opaque rather than be half-read. A bare `~` is left out
+# because a quoted "~5" in prose means "about five".
+_REQUIREMENT_RE = re.compile(
+    rf"(?P<op>(?:>=|~=|==|\^)\s*)(?P<v>[vV]?\d+(?:\.\d+)*{_VERSION_TAIL})")
+
 # Anything that can sit in a document and be claimed, in priority order.
 _TOKEN_RE = re.compile(
     rf"""(?P<quoted>{QUOTED_RE.pattern})
@@ -83,6 +93,7 @@ class Value:
     space: str = ""            # whitespace between number and suffix
     quote: str = ""            # the quote character it was written inside, if any
     version: str = ""          # "3.10.0-rc.2" when this is a version, without any `v`
+    operator: str = ""         # ">=" or "^" written in front of a version requirement
 
     @property
     def numeric(self) -> bool:
@@ -130,6 +141,11 @@ def parse(text: str) -> Value:
 
     if re.fullmatch(_VERSION, text):
         return Value(raw=text, version=text.lstrip("vV"))
+
+    requirement = _REQUIREMENT_RE.fullmatch(text)
+    if requirement:
+        return Value(raw=text, version=requirement.group("v").lstrip("vV"),
+                     operator=requirement.group("op"))
 
     m = re.fullmatch(rf"(?P<num>{_NUMBER})(?P<space>\s*)(?P<suffix>{_SUFFIX})", text)
     if not m:
@@ -221,11 +237,11 @@ def _group(digits: str, separator: str = ",") -> str:
 
 
 def render_version_like(produced: Value, template: Value) -> str:
-    """Write a new version in the old one's style - its `v`, its quotes."""
+    """Write a new version in the old one's style - its operator, its `v`, its quotes."""
     text = produced.version or produced.raw.strip().strip("\"'").lstrip("vV")
-    bare = template.raw.strip().strip("\"'")
+    bare = template.raw.strip().strip("\"'")[len(template.operator):]
     prefix = bare[:1] if bare[:1] in ("v", "V") else ""
-    return f"{template.quote}{prefix}{text}{template.quote}"
+    return f"{template.quote}{template.operator}{prefix}{text}{template.quote}"
 
 
 def render_like(number: float, template: Value) -> str:

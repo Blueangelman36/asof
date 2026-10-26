@@ -490,7 +490,7 @@ def _planned_edits(results: list[core.Result]) -> dict[str, list[dict]]:
     """
     return {
         r.name: [{"path": m.path.as_posix(), "line": m.line_no,
-                  "from": m.token, "to": r.suggestion} for m in r.markers]
+                  "from": m.token, "to": core.rewrite_for(r, m)} for m in r.markers]
         for r in results if r.status is Status.DRIFT
     }
 
