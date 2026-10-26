@@ -29,13 +29,14 @@ jobs:
 
       # A tag that disagrees with the code publishes a version number that
       # means nothing, and PyPI never lets that number be used again.
-      - name: The tag, the package and the module agree on the version
+      - name: The tag, the package, the module and the plugin agree on the version
         run: |
           tag="${GITHUB_REF_NAME#v}"
           module=$(python -c "import asof; print(asof.__version__)")
           declared=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
-          if [ "$tag" != "$module" ] || [ "$tag" != "$declared" ]; then
-            echo "::error::tag v$tag, asof.__version__ $module, pyproject.toml $declared"
+          plugin=$(python -c "import json; print(json.load(open('.claude-plugin/plugin.json'))['version'])")
+          if [ "$tag" != "$module" ] || [ "$tag" != "$declared" ] || [ "$tag" != "$plugin" ]; then
+            echo "::error::tag v$tag, asof.__version__ $module, pyproject.toml $declared, plugin.json $plugin"
             exit 1
           fi
 

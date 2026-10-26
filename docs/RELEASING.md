@@ -37,13 +37,18 @@ token only it can obtain.
 ## Releasing
 
 ```bash
-# 1. Set the version in both places. The workflow refuses a tag that disagrees.
-$EDITOR pyproject.toml asof/__init__.py
+# 1. Set the version in all three places. The workflow refuses a tag that disagrees.
+$EDITOR pyproject.toml asof/__init__.py .claude-plugin/plugin.json
 
 # 2. Commit, then tag the commit on main.
-git tag -a v0.4.0 -m "asof 0.4.0"
-git push origin v0.4.0
+git tag -a v0.4.1 -m "asof 0.4.1"
+git push origin v0.4.1
 ```
+
+`v0.4.0` was tagged before the PyPI setup, so it produced `asof.pyz` and no package.
+The first PyPI release is `v0.4.1`; CI's `package` job has already built and installed
+exactly what it will upload. Once it is on PyPI, change the README's install line to
+`pip install asof-claims`.
 
 Then watch the run in the **Actions** tab. The GitHub release appears when the build
 passes; the PyPI job waits on the `pypi` environment, or is skipped if
@@ -54,9 +59,9 @@ passes; the PyPI job waits on the `pypi` environment, or is skipped if
 Other repositories should pin what they use, whichever way they use it:
 
 ```yaml
-- uses: Blueangelman36/asof@v0.4.0          # the action
-- run: pip install asof-claims==0.4.0        # from PyPI
-- run: pip install git+https://github.com/Blueangelman36/asof@v0.4.0
+- uses: Blueangelman36/asof@v0.4.1          # the action
+- run: pip install asof-claims==0.4.1        # from PyPI
+- run: pip install git+https://github.com/Blueangelman36/asof@v0.4.1
 ```
 
 A version on PyPI can be yanked but never deleted or reused, so a broken release gets a

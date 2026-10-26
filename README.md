@@ -317,6 +317,15 @@ it arrives *before* the mistake rather than after CI catches it. The skill ships
 inside the package, so the copy you read on GitHub and the copy `pip` installs
 are asserted to be the same file.
 
+The same skill also installs as a Claude Code plugin, for every project at once:
+
+```text
+/plugin marketplace add Blueangelman36/asof
+/plugin install asof@asof
+```
+
+The plugin teaches the agent to use `asof`; the tool itself still has to be installed.
+
 `asof agents` writes the instructions in the form an agent needs them: change
 marked numbers freely, check before changing a constant that a document also
 states, and **never delete an `asof:` comment to make a check pass.** That last
