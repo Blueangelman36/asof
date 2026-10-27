@@ -1,0 +1,13 @@
+{
+  "name": "asof",
+  "version": "0.4.1",
+  "description": "Teaches Claude to keep numbers in documentation true with asof: fix failing claim checks, adopt it in a repository, and check docs before changing a constant. Needs the asof tool: pip install asof-claims.",
+  "author": {
+    "name": "Blueangelman36"
+  },
+  "homepage": "https://github.com/Blueangelman36/asof",
+  "repository": "https://github.com/Blueangelman36/asof",
+  "license": "MIT",
+  "keywords": ["documentation", "docs", "drift", "ci", "agents"],
+  "skills": "./.claude/skills/"
+}

@@ -164,6 +164,13 @@ class TestTreeAndRewrite(unittest.TestCase):
         self.write(".git/config", "8 # asof:a")
         self.assertEqual(scan.scan_tree(self.root, [], []), [])
 
+    def test_reads_dot_github(self):
+        # Found adopting asof on chesterton: a `.git` prefix test skipped
+        # `.github` too, so the Python version CI tests could never be a claim.
+        self.write(".github/workflows/ci.yml", 'python-version: "3.11"  # asof:py')
+        found = scan.scan_tree(self.root, [], [])
+        self.assertEqual([(m.name, m.token) for m in found], [("py", '"3.11"')])
+
     def test_skips_a_virtualenv_whatever_it_is_called(self):
         # Found by installing asof from a public URL into a venv named `v`:
         # it scanned its own installed source and invented a claim from the

@@ -77,7 +77,9 @@ def walk(root: Path, include: list[str], exclude: list[str]):
         if VENV_MARKER in filenames and Path(dirpath) != root:
             dirnames[:] = []
             continue
-        dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS and not d.startswith(".git"))
+        # `.git` itself is in SKIP_DIRS. Not a `.git` prefix: that also skipped
+        # `.github`, where CI states the very versions and limits a README does.
+        dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS)
         for name in sorted(filenames):
             full = Path(dirpath) / name
             rel = full.relative_to(root).as_posix()

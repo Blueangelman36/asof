@@ -94,8 +94,13 @@ Commit `asof.lock`. It records when each claim was last known to be true.
   pre-release tag must match. A two-part version like `3.10` is also the
   decimal 3.1, so a claim tracking one needs `type = version` in `asof.ini` —
   add it whenever the claim is a Python, Node, API or SDK version.
-- **`asof update` only fixes drift.** Anything else needs a person to decide
-  which file is wrong, and it says so rather than exiting 0.
+- **A requirement names its lowest version.** `requires-python = ">=3.11"`
+  (or `~=`, `==`, npm's `^`) is the same claim as a README's "Python 3.11+",
+  so mark both. `>3.11`, `<4` and ranges like `>=3.11,<4` are not read.
+- **`asof update` only fixes drift,** and writes each place in its own style:
+  `1,000` in prose, `1000` in config, `">=3.12"` in pyproject.toml. Anything
+  else needs a person to decide which file is wrong, and it says so rather
+  than exiting 0.
 - **`asof:off`** in a file excludes it entirely.
 
 ## If it is not installed

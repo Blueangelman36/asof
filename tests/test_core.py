@@ -206,6 +206,31 @@ class TestVersionClaims(Base):
         results, _ = self.run_check()
         self.assertIs(results["floor"].status, Status.INCONSISTENT)
 
+    def test_a_requirement_and_a_readme_are_one_claim(self):
+        # The case that found it: chesterton's README and requires-python.
+        self.write("README.md", "No dependencies. Python 3.11+. <!-- asof:py -->")
+        toml = self.write("pyproject.toml", 'requires-python = ">=3.11"  # asof:py\n')
+        self.write("asof.ini", f"[py]\ntype = version\nrun = {echo('3.11')}\n")
+        results, _ = self.run_check()
+        self.assertIs(results["py"].status, Status.OK)
+
+        self.write("asof.ini", f"[py]\ntype = version\nrun = {echo('3.12')}\n")
+        cfg = config.load(self.root)
+        st = state.State.load(self.root)
+        core.update(self.root, core.check(self.root, cfg, st, now=self.now), st, self.now)
+        self.assertIn('requires-python = ">=3.12"', toml.read_text(encoding="utf-8"))
+
+    def test_update_writes_each_place_in_its_own_style(self):
+        # asof 0.4.0 wrote the README's spelling everywhere: `limit = 2,000`.
+        readme = self.write("README.md", "We allow 1,000 requests a minute. <!-- asof:limit -->")
+        toml = self.write("config.toml", "limit = 1000  # asof:limit\n")
+        self.write("asof.ini", f"[limit]\nrun = {echo('2000')}\n")
+        cfg = config.load(self.root)
+        st = state.State.load(self.root)
+        core.update(self.root, core.check(self.root, cfg, st, now=self.now), st, self.now)
+        self.assertIn("We allow 2,000 requests", readme.read_text(encoding="utf-8"))
+        self.assertIn("limit = 2000  #", toml.read_text(encoding="utf-8"))
+
     def test_type_version_drift_on_a_two_part_floor(self):
         self.write("README.md", "Python 3.10+ is required. <!-- asof:floor -->")
         self.write("asof.ini", f"[floor]\ntype = version\nrun = {echo('3.1')}\n")

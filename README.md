@@ -317,6 +317,15 @@ it arrives *before* the mistake rather than after CI catches it. The skill ships
 inside the package, so the copy you read on GitHub and the copy `pip` installs
 are asserted to be the same file.
 
+The same skill also installs as a Claude Code plugin, for every project at once:
+
+```text
+/plugin marketplace add Blueangelman36/asof
+/plugin install asof@asof
+```
+
+The plugin teaches the agent to use `asof`; the tool itself still has to be installed.
+
 `asof agents` writes the instructions in the form an agent needs them: change
 marked numbers freely, check before changing a constant that a document also
 states, and **never delete an `asof:` comment to make a check pass.** That last
@@ -395,6 +404,13 @@ shelf life it has used. Useful as a quarterly "what do we still believe" review.
   [python-floor]
   type = version       # so 3.10 and 3.1 are different Pythons, not one number
   ```
+- **A requirement names its lowest version.** `requires-python = ">=3.11"` says what
+  a README's "Python 3.11+" says, and is where most projects actually declare it, so
+  the two can be one claim. `~=`, `==` and npm's `^` read the same way; `>3.11`, `<4`
+  and ranges such as `>=3.11,<4` do not, since none of them names the version meant.
+  An update keeps the operator: `">=3.11"` becomes `">=3.12"`.
+- **Each place is updated in its own style.** `asof update` writes `1,000` where the
+  README wrote `1,000` and `1000` where config.toml wrote `1000`.
 - **A quoted number is a number.** Config files quote what prose writes bare, so a
   README saying `99%` still matches `max="99"` in HTML or `version = "3.11"` in TOML.
   A quoted *word* stays a word, so `"low"` is a claim you can make about a setting.
@@ -432,8 +448,8 @@ as though it did.
 
 The README you are reading is under `asof`, which is the only honest way to ship this:
 
-- The whole tool is 5,400 lines of Python. <!-- asof:source-lines -->
-- It is covered by 311 tests. <!-- asof:test-count -->
+- The whole tool is 5,491 lines of Python. <!-- asof:source-lines -->
+- It is covered by 319 tests. <!-- asof:test-count -->
 - It has 0 third-party dependencies. <!-- asof:dependencies -->
 
 Those three numbers are checked on every push by [the workflow](.github/workflows/ci.yml).

@@ -323,6 +323,19 @@ def _suggest(document: values.Value, produced: values.Value, kind: str = "") -> 
     return produced.raw
 
 
+def rewrite_for(result: Result, marker: scan.Marker) -> str:
+    """What this one place should say, in its own style.
+
+    Each place gets its own rendering, not the first place's. A README writes
+    `1,000` where config.toml writes `1000`, and prose writes `3.11` where
+    pyproject.toml writes `">=3.11"`; writing one spelling everywhere turned
+    `limit = 1000` into `limit = 2,000`, which is not TOML.
+    """
+    if result.produced is None:
+        return result.suggestion or ""
+    return _suggest(marker.value, values.parse(result.produced), result.claim.kind)
+
+
 def update(root: Path, results: list[Result], st: state.State,
            moment: datetime | None = None) -> list[Result]:
     """Rewrite drifting documents to match their commands."""
@@ -332,7 +345,7 @@ def update(root: Path, results: list[Result], st: state.State,
         if result.status is not Status.DRIFT or not result.suggestion:
             continue
         for marker in result.markers:
-            scan.rewrite(root, marker, result.suggestion)
+            scan.rewrite(root, marker, rewrite_for(result, marker))
         st.record(result.name, result.suggestion, "run", moment,
                   files=sorted({m.path.as_posix() for m in result.markers}))
         result.document, result.status = result.suggestion, Status.OK

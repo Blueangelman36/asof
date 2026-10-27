@@ -1,0 +1,29 @@
+{
+  "id": "bbb8c28c",
+  "reason": "Only exact names in SKIP_DIRS are skipped, not a '.git' prefix. The prefix test also skipped .github, so a version or limit stated in a CI workflow could never be a claim; found adopting asof on chesterton (2026-10-26). .git itself is in SKIP_DIRS.",
+  "source": null,
+  "author": "Claude",
+  "created": "2026-10-26",
+  "snippet": "dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS)",
+  "anchors": {
+    "3": {
+      "version": 3,
+      "path": "asof/scan.py",
+      "scope": "walk",
+      "kind": "Assign",
+      "line": 82,
+      "exact": "58682582f81ce014",
+      "shape": "6e167fd72f6610b7",
+      "dupes": {
+        "exact": 1,
+        "shape": 1,
+        "other_exact": 0,
+        "other_shape": 0,
+        "far_exact": 0,
+        "far_shape": 0
+      },
+      "rival": 0.2727272727272727,
+      "tokens": ["dirnames", "[", ":", "]", "=", "sorted", "(", "d", "for", "d", "in", "dirnames", "if", "d", "not", "in", "SKIP_DIRS", ")"]
+    }
+  }
+}

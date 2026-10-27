@@ -1,0 +1,29 @@
+{
+  "id": "2e1fe712",
+  "reason": "Only operators whose version is the one meant. >=, ~=, == and ^ name the lowest version a project means (requires-python, package.json); >3.11 and <4 name versions it does not, and a range like >=3.11,<4 would be half-read. A bare ~ is excluded because a quoted '~5' in prose means 'about five'. Found adopting asof on chesterton, where '>=3.11' split against 'Python 3.11+'.",
+  "source": null,
+  "author": "Claude",
+  "created": "2026-10-26",
+  "snippet": "_REQUIREMENT_RE = re.compile(\n    rf\"(?P<op>(?:>=|~=|==|\\^)\\s*)(?P<v>[vV]?\\d+(?:\\.\\d+)*{_VERSION_TAIL})\")",
+  "anchors": {
+    "3": {
+      "version": 3,
+      "path": "asof/values.py",
+      "scope": "",
+      "kind": "Assign",
+      "line": 68,
+      "exact": "5fa1a55eb90949ab",
+      "shape": "ad20b253d4d01bec",
+      "dupes": {
+        "exact": 1,
+        "shape": 1,
+        "other_exact": 0,
+        "other_shape": 0,
+        "far_exact": 0,
+        "far_shape": 0
+      },
+      "rival": 0.5294117647058824,
+      "tokens": ["_REQUIREMENT_RE", "=", "re", ".", "compile", "(", "rf\"", "<785177fc>", "{", "_VERSION_TAIL", "}", ")", "\"", ")"]
+    }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "id": "3aeab454",
+  "reason": "newline='' is load-bearing. read_text() translates CRLF to LF, so rewriting one number in a CRLF file rewrote every line ending: a one-digit change arrived as a whole-file diff on Windows. Read and write untranslated and splice the line in place ('Stop rewriting line endings on update').",
+  "source": null,
+  "author": "Claude",
+  "created": "2026-10-26",
+  "snippet": "with open(path, encoding=\"utf-8\", newline=\"\") as fh:\n    lines = fh.read().splitlines(keepends=True)",
+  "anchors": {
+    "3": {
+      "version": 3,
+      "path": "asof/scan.py",
+      "scope": "rewrite",
+      "kind": "With",
+      "line": 214,
+      "exact": "e054cfb921a4ab70",
+      "shape": "9edf7051be13e613",
+      "dupes": {
+        "exact": 1,
+        "shape": 1,
+        "other_exact": 0,
+        "other_shape": 0,
+        "far_exact": 0,
+        "far_shape": 0
+      },
+      "rival": 0.5,
+      "tokens": ["with", "open", "(", "path", ",", "encoding", "=", "\"utf-8\"", ",", "newline", "=", "\"\"", ")", "as", "fh", ":", "lines", "=", "fh", ".", "read", "(", ")", ".", "splitlines", "(", "keepends", "=", "True", ")"]
+    }
+  }
+}

@@ -38,6 +38,57 @@ jobs:
         if: always()
         run: python -m asof check --no-run --fail-on stale
 
+  package:
+    # What `pip install asof-claims` will get, built and installed the way a
+    # stranger would: outside the source tree, so nothing passes only because
+    # the tests run from the checkout. Before this the package was first built
+    # on release day, and a PyPI version that ships broken can never be reused.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.10"  # the oldest requires-python allows
+      - name: Build, and check what PyPI will render
+        run: |
+          python -m pip install --upgrade build twine
+          python -m build
+          python -m twine check --strict dist/*
+      - name: Install the wheel in a clean environment and use it
+        run: |
+          python -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install dist/*.whl
+          unzip -l dist/*.whl | grep -q 'dist-info/licenses/LICENSE'
+          asof="$RUNNER_TEMP/venv/bin/asof"
+          mkdir -p "$RUNNER_TEMP/probe" && cd "$RUNNER_TEMP/probe"
+          "$asof" --version
+          echo 'We have 47 things. <!-- asof:things -->' > README.md
+          echo '52 things. <!-- asof:things -->' > docs.md
+          if "$asof" check; then
+            echo "::error::the installed asof missed a split it should have caught"; exit 1
+          fi
+          # The skill ships inside the package; a wheel without it fails here.
+          "$asof" skill && test -s .claude/skills/asof/SKILL.md
+
+  fences:
+    # Why the load-bearing code is the way it is, recorded with fence (chesterton,
+    # the sibling tool) in .fence/notes/. A change that removes one of those
+    # statements fails here and names the reason, which is quoted on the PR too.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write  # the reasons comment
+    steps:
+      - uses: actions/checkout@v7
+      # Pinned by commit, like every tool that checks this build. The notes were
+      # written by the Python build, so that is the one asked; --strict fails on a
+      # note it could not compare rather than passing it.
+      - uses: Blueangelman36/chesterton@a5842f13016ae1fc0790442872fa3bd97f4196df # v0.1.0
+        with:
+          implementation: python
+          args: check --strict
+          comment-on-pr: true
+
   single-file:
     # The zipapp is how asof reaches a repo that will not pip install it, so
     # it is built and exercised on every push rather than at release time.

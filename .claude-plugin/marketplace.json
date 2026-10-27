@@ -1,0 +1,14 @@
+{
+  "name": "asof",
+  "owner": {
+    "name": "Blueangelman36"
+  },
+  "description": "asof: every number in your docs is a claim about a moment that has already passed.",
+  "plugins": [
+    {
+      "name": "asof",
+      "source": "./",
+      "description": "Keep numbers in documentation true: fix failing asof checks and adopt asof in a repository."
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "id": "a37b83ef",
+  "reason": "A virtualenv is detected by pyvenv.cfg, not by name. Installing asof from a URL into a venv called 'v' made it scan its own installed source and invent a claim from its help text; envs are called anything, and their dependencies are full of other people's docs.",
+  "source": null,
+  "author": "Claude",
+  "created": "2026-10-26",
+  "snippet": "if VENV_MARKER in filenames and Path(dirpath) != root:\n    dirnames[:] = []\n    continue",
+  "anchors": {
+    "3": {
+      "version": 3,
+      "path": "asof/scan.py",
+      "scope": "walk",
+      "kind": "If",
+      "line": 77,
+      "exact": "9d9abefe07e7a8c4",
+      "shape": "628b98971541c8c8",
+      "dupes": {
+        "exact": 1,
+        "shape": 1,
+        "other_exact": 0,
+        "other_shape": 0,
+        "far_exact": 0,
+        "far_shape": 0
+      },
+      "rival": 0.16,
+      "tokens": ["if", "VENV_MARKER", "in", "filenames", "and", "Path", "(", "dirpath", ")", "!=", "root", ":", "dirnames", "[", ":", "]", "=", "[", "]", "continue"]
+    }
+  }
+}
