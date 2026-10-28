@@ -46,9 +46,8 @@ git push origin v0.4.1
 ```
 
 `v0.4.0` was tagged before the PyPI setup, so it produced `asof.pyz` and no package.
-The first PyPI release is `v0.4.1`; CI's `package` job has already built and installed
-exactly what it will upload. Once it is on PyPI, change the README's install line to
-`pip install asof-claims`.
+The first PyPI release is `v0.4.1`, published on 2026-10-28; the README's install line
+has said `pip install asof-claims` since.
 
 Then watch the run in the **Actions** tab. The GitHub release appears when the build
 passes; the PyPI job waits on the `pypi` environment, or is skipped if

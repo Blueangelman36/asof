@@ -106,7 +106,7 @@ Commit `asof.lock`. It records when each claim was last known to be true.
 ## If it is not installed
 
 ```bash
-pip install git+https://github.com/Blueangelman36/asof
+pip install asof-claims    # the package's name on PyPI; the command is asof
 ```
 
 Or run the vendored single file if the repository has one — `python asof.pyz
