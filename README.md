@@ -17,7 +17,7 @@ someone to look again when it expires.
 No dependencies. Python 3.10+.
 
 ```bash
-pip install git+https://github.com/Blueangelman36/asof
+pip install asof-claims    # the package's name on PyPI; the command is asof
 ```
 
 Or take the single file and skip installing anything: `python asof.pyz check`
@@ -201,7 +201,7 @@ jobs:
 Without the action it is the same two commands:
 
 ```yaml
-- run: pip install git+https://github.com/Blueangelman36/asof@<tag or full commit>
+- run: pip install asof-claims==<version>   # or git+https://github.com/Blueangelman36/asof@<full commit>
 - run: asof check                            # what a machine can settle
 - run: asof check --no-run --fail-on stale   # what a person must settle
 ```
