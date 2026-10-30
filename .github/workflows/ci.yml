@@ -83,7 +83,7 @@ jobs:
       # Pinned by commit, like every tool that checks this build. The notes were
       # written by the Python build, so that is the one asked; --strict fails on a
       # note it could not compare rather than passing it.
-      - uses: Blueangelman36/chesterton@a5842f13016ae1fc0790442872fa3bd97f4196df # v0.1.0
+      - uses: Blueangelman36/chesterton@ee667eb20d4009f3574c849f037804351ffd27b3 # v0.1.1
         with:
           implementation: python
           args: check --strict
